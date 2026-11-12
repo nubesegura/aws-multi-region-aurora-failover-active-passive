@@ -11,5 +11,5 @@ pytest-timeout==2.4.0
 coverage==7.16.2
 ruff==0.16.10
 mypy==2.4.0
-import-linter==2.15
+import-linter==2.16
 grimp==3.17
