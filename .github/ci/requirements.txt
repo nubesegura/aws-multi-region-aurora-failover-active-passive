@@ -3,6 +3,6 @@
 # checkov lives in requirements-checkov.txt and is installed in its own environment: aws-sam-cli and checkov pin
 # different exact boto3 versions, so they cannot share one environment.
 aws-sam-cli==1.166.2
-cfn-lint==1.53.3
+cfn-lint==1.60.0
 shellcheck-py==0.11.0.1
 actionlint-py==1.7.12.25
