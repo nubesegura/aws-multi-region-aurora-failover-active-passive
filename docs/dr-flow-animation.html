@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DR flow animation</title>
+<!--
+  Animated walkthrough of the DR drill. Self-contained: open the file in a browser, no build, no network.
+  HOW TO EDIT (everything lives in the DATA section of the script):
+    NODES   boxes (position, title, default sub text)
+    EDGES   connections (SVG path, default style, optional label)
+    STATES  named starting points for the scenes
+    SCENES  the story: each step has a caption, state changes and the edges that animate
+  Step fields: nodes {id:{mode,badge,kind,sub}}, edges {id:style}, labels {id:text}, flow [...], ctl [...], pulse [...]
+  Flow items: 'edge' forward, '~edge' reverse, '!edge' blocked (red cross), ['a','b'] in parallel.
+  Controls: Space play/pause, arrows previous/next step, 1-3 scenes. URL: #scene=2&step=3&play=0
+-->
+<style>
+  :root {
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1b2430; --muted:#5b6675; --line:#c9d0da;
+    --blue:#2563eb; --blue-bg:#e8f0fe; --green:#15803d; --green-bg:#e7f6ec; --purple:#7e22ce; --purple-bg:#f3e8ff;
+    --pink:#be185d; --pink-bg:#fce7f3; --amber:#b45309; --amber-bg:#fef3c7; --red:#dc2626; --red-bg:#fee2e2;
+    --zone:#eef1f5; --zone-line:#d3d9e2; --ctl:#ea580c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0f141b; --panel:#171e28; --ink:#e6ebf2; --muted:#9aa6b6; --line:#3a4658;
+      --blue:#60a5fa; --blue-bg:#16263f; --green:#4ade80; --green-bg:#112a1b; --purple:#c084fc; --purple-bg:#26163a;
+      --pink:#f472b6; --pink-bg:#3a1428; --amber:#fbbf24; --amber-bg:#3a2a0a; --red:#f87171; --red-bg:#3b1515;
+      --zone:#141b25; --zone-line:#2a3547; --ctl:#fb923c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0f141b; --panel:#171e28; --ink:#e6ebf2; --muted:#9aa6b6; --line:#3a4658;
+    --blue:#60a5fa; --blue-bg:#16263f; --green:#4ade80; --green-bg:#112a1b; --purple:#c084fc; --purple-bg:#26163a;
+    --pink:#f472b6; --pink-bg:#3a1428; --amber:#fbbf24; --amber-bg:#3a2a0a; --red:#f87171; --red-bg:#3b1515;
+    --zone:#141b25; --zone-line:#2a3547; --ctl:#fb923c;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1240px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 2px; }
+  .sub { color:var(--muted); margin:0 0 12px; font-size:13px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .tab { border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:7px 12px; border-radius:8px; cursor:pointer; font:inherit; font-size:14px; }
+  .tab[aria-selected="true"] { border-color:var(--blue); background:var(--blue-bg); color:var(--blue); font-weight:600; }
+  .stage { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:8px; }
+  svg { width:100%; height:auto; display:block; }
+  .caption { margin-top:10px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 16px; min-height:96px; }
+  .caption h2 { margin:0 0 4px; font-size:16px; }
+  .caption p { margin:0; color:var(--muted); }
+  .bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; }
+  .btn { border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:6px 12px; border-radius:8px; cursor:pointer; font:inherit; font-size:14px; }
+  .btn:hover { border-color:var(--blue); }
+  .dots { display:flex; gap:6px; flex:1; min-width:160px; }
+  .dot { flex:1; height:6px; border-radius:3px; background:var(--line); cursor:pointer; max-width:46px; }
+  .dot.done { background:var(--blue); opacity:.55; } .dot.cur { background:var(--blue); }
+  select { border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:6px 8px; border-radius:8px; font:inherit; font-size:14px; }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin-top:10px; font-size:12.5px; color:var(--muted); }
+  .legend i { display:inline-block; width:22px; height:0; border-top:3px solid var(--blue); vertical-align:middle; margin-right:5px; }
+  .legend i.d { border-top:3px dotted var(--muted); } .legend i.c { border-top:3px dashed var(--ctl); } .legend i.x { border-top:3px solid var(--red); }
+
+  /* svg */
+  .zone { fill:var(--zone); stroke:var(--zone-line); }
+  .zone-label { fill:var(--muted); font-size:12px; font-weight:600; letter-spacing:.3px; }
+  .node rect { stroke-width:1.5; transition:opacity .4s, stroke .4s, fill .4s; }
+  .node text { pointer-events:none; }
+  .node .t { font-size:14px; font-weight:600; fill:var(--ink); }
+  .node .s { font-size:11.5px; fill:var(--muted); }
+  .k-compute rect { fill:var(--blue-bg); stroke:var(--blue); }
+  .k-data rect { fill:var(--green-bg); stroke:var(--green); }
+  .k-edge rect { fill:var(--purple-bg); stroke:var(--purple); }
+  .k-auth rect { fill:var(--pink-bg); stroke:var(--pink); }
+  .k-ops rect { fill:var(--amber-bg); stroke:var(--amber); }
+  .k-client rect { fill:var(--panel); stroke:var(--ink); }
+  .node.standby { opacity:.42; }
+  .node.fenced rect { fill:var(--red-bg); stroke:var(--red); stroke-dasharray:6 4; }
+  .node.alarm rect { stroke:var(--red); stroke-width:3; animation:alarm 1s ease-in-out infinite; }
+  .node.hidden { opacity:0; }
+  @keyframes alarm { 50% { stroke-opacity:.25; } }
+  .pulse-ring { fill:none; stroke:var(--blue); stroke-width:3; opacity:0; animation:ring 1.4s ease-out 2; }
+  @keyframes ring { 0% { opacity:.9; transform:scale(1); } 100% { opacity:0; transform:scale(1.08); } }
+  .badge rect { stroke:none; } .badge text { font-size:10.5px; font-weight:700; fill:#fff; }
+  .badge.ok rect { fill:var(--green); } .badge.idle rect { fill:#64748b; } .badge.warn rect { fill:var(--amber); } .badge.bad rect { fill:var(--red); } .badge.info rect { fill:var(--blue); }
+  .edge { fill:none; stroke-linecap:round; transition:stroke .3s, opacity .3s; }
+  .edge.faint { stroke:var(--line); stroke-width:2; }
+  .edge.solid { stroke:var(--blue); stroke-width:2.5; opacity:.5; }
+  .edge.dotted { stroke:var(--muted); stroke-width:2; stroke-dasharray:2 6; opacity:.8; }
+  .edge.off { opacity:0; }
+  .edge.lit { opacity:1; stroke:var(--blue); stroke-width:4; stroke-dasharray:none; }
+  .edge-label { font-size:11px; fill:var(--muted); paint-order:stroke; stroke:var(--panel); stroke-width:4px; }
+  .packet { fill:var(--blue); stroke:var(--panel); stroke-width:2; }
+  .ctl-line { fill:none; stroke:var(--ctl); stroke-width:3; stroke-dasharray:7 5; }
+  .ctl-packet { fill:var(--ctl); stroke:var(--panel); stroke-width:2; }
+  .cross { stroke:var(--red); stroke-width:5; stroke-linecap:round; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>DR drill: normal flow, simulated outage, failover</h1>
+  <p class="sub">Active-passive banking demo. us-east-2 serves at creation, us-west-2 is the standby. Edit the DATA section of this file to change the story.</p>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="stage"><svg id="svg" viewBox="0 0 1220 760" role="img" aria-label="Animated DR architecture"></svg></div>
+  <div class="caption" aria-live="polite"><h2 id="cap-title"></h2><p id="cap-text"></p></div>
+  <div class="bar">
+    <button class="btn" id="prev" title="Previous step (left arrow)">&#9664; Prev</button>
+    <button class="btn" id="play" title="Play or pause (space)">Pause</button>
+    <button class="btn" id="next" title="Next step (right arrow)">Next &#9654;</button>
+    <div class="dots" id="dots"></div>
+    <label>Speed <select id="speed"><option value="0.6">0.6x</option><option value="1" selected>1x</option><option value="1.6">1.6x</option></select></label>
+  </div>
+  <div class="legend">
+    <span><i></i>request or response</span><span><i class="d"></i>standby or async replication</span>
+    <span><i class="c"></i>GitHub Actions control plane</span><span><i class="x"></i>blocked request</span>
+  </div>
+</div>
+
+<script>
+/* =====================================================================================================
+   DATA: edit here
+   ===================================================================================================== */
+
+// x, y, w, h in SVG units. kind picks the colour. sub: use \n for a second line. badge/kind: shown as a pill.
+const NODES = {
+  browser: { x:16,  y:250, w:140, h:100, kind:'client',  title:'Browser', sub:'Banking app\nDR monitor', badge:'ONLINE', bk:'ok' },
+  gh:      { x:16,  y:560, w:140, h:80,  kind:'ops',     title:'GitHub Actions', sub:'OIDC, org role', badge:'IDLE', bk:'idle' },
+  cf:      { x:196, y:40,  w:200, h:50,  kind:'edge',    title:'CloudFront x2', sub:'bank + monitor, OAC' },
+  s3:      { x:420, y:40,  w:200, h:50,  kind:'data',    title:'S3 buckets x2', sub:'private, us-east-2' },
+  r53:     { x:640, y:34,  w:120, h:62,  kind:'edge',    title:'Route 53', sub:'weighted alias' },
+
+  cogE:    { x:196, y:160, w:400, h:56,  kind:'auth',    title:'Cognito user pool', sub:'primary, customer managed KMS MRK', badge:'PRIMARY', bk:'ok' },
+  apiE:    { x:196, y:258, w:400, h:56,  kind:'edge',    title:'API Gateway', sub:'Cognito authorizer', badge:'', bk:'ok' },
+  fncE:    { x:216, y:396, w:360, h:76,  kind:'compute', title:'6 Lambda functions (arm64)', sub:'IAM DB auth, private subnets', badge:'RUNNING', bk:'ok' },
+  dbE:     { x:216, y:556, w:360, h:84,  kind:'data',    title:'Aurora PostgreSQL', sub:'cluster in us-east-2', badge:'WRITER', bk:'ok' },
+
+  cogW:    { x:784, y:160, w:400, h:56,  kind:'auth',    title:'Cognito user pool', sub:'replica, same pool and client IDs', badge:'REPLICA INACTIVE', bk:'idle' },
+  apiW:    { x:784, y:258, w:400, h:56,  kind:'edge',    title:'API Gateway', sub:'Cognito authorizer', badge:'', bk:'idle' },
+  fncW:    { x:804, y:396, w:360, h:76,  kind:'compute', title:'6 Lambda functions (arm64)', sub:'identical code', badge:'IDLE', bk:'idle' },
+  dbW:     { x:804, y:556, w:360, h:84,  kind:'data',    title:'Aurora PostgreSQL', sub:'cluster in us-west-2', badge:'READER', bk:'idle' },
+};
+
+// Static boxes behind the nodes.
+const ZONES = [
+  { x:176, y:14,  w:1028, h:92,  label:'Global: CloudFront sites (edge stack and S3 in us-east-2) | us-east-1: DNS weights (dns stack), bootstrap IAM' },
+  { x:176, y:130, w:440,  h:590, label:'us-east-2  (primary at creation)' },
+  { x:764, y:130, w:440,  h:590, label:'us-west-2  (secondary at creation)' },
+  { x:196, y:346, w:400,  h:354, label:'VPC 10.40.0.0/24, private subnets, no NAT', inner:true },
+  { x:784, y:346, w:400,  h:354, label:'VPC 10.41.0.0/24, private subnets, no NAT', inner:true },
+];
+
+// s: default style: faint | solid | dotted | off. label: optional text at (lx, ly).
+const EDGES = {
+  'b-cf':     { d:'M110,250 L110,66 L196,66',                       s:'solid' },
+  'cf-s3':    { d:'M396,65 L420,65',                                s:'solid' },
+  'b-cogE':   { d:'M156,270 L186,270 L186,188 L196,188',            s:'solid', label:'sign in', lx:200, ly:240 },
+  'b-r53':    { d:'M60,250 L60,118 L670,118 L670,96',               s:'solid', label:'resolve API domain', lx:300, ly:113 },
+  'b-cogW':   { d:'M130,250 L130,124 L984,124 L984,160',            s:'dotted', label:'re-auth on failover', lx:800, ly:117 },
+  'r53-apiE': { d:'M690,96 L690,286 L596,286',                      s:'solid',  label:'255', lx:650, ly:210 },
+  'r53-apiW': { d:'M710,96 L710,286 L784,286',                      s:'dotted', label:'0',   lx:722, ly:210 },
+  'apiE-cogE':{ d:'M300,258 L300,216',                              s:'solid', label:'validate token', lx:308, ly:242 },
+  'apiW-cogW':{ d:'M888,258 L888,216',                              s:'dotted' },
+  'apiE-fncE':{ d:'M300,314 L300,396',                              s:'solid' },
+  'apiW-fncW':{ d:'M888,314 L888,396',                              s:'dotted' },
+  'fncE-dbE': { d:'M300,472 L300,556',                              s:'solid', label:'SQL over TLS 5432', lx:308, ly:520 },
+  'fncW-dbW': { d:'M888,472 L888,556',                              s:'dotted' },
+  'dbE-dbW':  { d:'M576,598 L804,598',                              s:'dotted', label:'Aurora Global DB, async ~1 s', lx:620, ly:590 },
+  'dbW-dbE':  { d:'M804,614 L576,614',                              s:'off',    label:'replication reversed', lx:640, ly:632 },
+  'cogE-cogW':{ d:'M596,188 L784,188',                              s:'dotted', label:'Cognito MRR, async', lx:632, ly:180 },
+};
+
+// GitHub Actions control-plane lines. A node without an entry here gets an automatic curve from the GitHub box.
+const CTL_PATHS = {
+  r53:  'M156,590 L166,590 L166,112 L650,112 L650,96',
+  dbW:  'M86,640 L86,742 L690,742 L690,626 L804,626',
+  cogW: 'M86,640 L86,746 L736,746 L736,200 L784,200',
+};
+
+// Named starting points. Scenes begin from one of these and then apply step deltas.
+const STATES = {
+  normal: {
+    nodes: { cogW:{mode:'standby'}, apiW:{mode:'standby'}, fncW:{mode:'standby'}, dbW:{mode:'standby'} },
+    edges: {}, labels: {},
+  },
+  fenced: {
+    nodes: {
+      fncE:{mode:'fenced', badge:'FENCED, concurrency 0', bk:'bad'},
+      apiE:{mode:'alarm', badge:'ALARM 5xx / throttles', bk:'bad'},
+      browser:{badge:'RECOVERING...', bk:'warn'},
+      cogW:{mode:'standby'}, apiW:{mode:'standby'}, fncW:{mode:'standby'}, dbW:{mode:'standby'},
+      gh:{badge:'DONE', bk:'ok'},
+    },
+    edges: {}, labels: {},
+  },
+};
+
+// flow: animated request paths. ctl: GitHub Actions dashed lines to a node. pulse: ring around nodes.
+const SCENES = [
+  { id:'normal', tab:'1. Normal operation', start:'normal', steps:[
+    { title:'The sites load from CloudFront',
+      text:'The browser loads the banking app and the read-only DR monitor from two CloudFront addresses. CloudFront reads two private S3 buckets through Origin Access Control.',
+      flow:['b-cf','cf-s3'] },
+    { title:'The user signs in to Cognito',
+      text:'USER_PASSWORD_AUTH against the user pool in us-east-2. The browser gets a 15-minute ID token and a refresh token, and keeps the credentials in memory for a later re-authentication.',
+      flow:['b-cogE','~b-cogE'] },
+    { title:'Route 53 chooses the region',
+      text:'The API has one custom domain. Two weighted alias records, us-east-2 = 255 and us-west-2 = 0, send every call to us-east-2.',
+      flow:['b-r53','r53-apiE'] },
+    { title:'API Gateway checks the token',
+      text:'The native Cognito authorizer validates the Bearer ID token and passes the claims to the function. Only GET /health and the CORS preflight need no token.',
+      flow:['apiE-cogE'] },
+    { title:'Lambda writes to Aurora',
+      text:'One of six functions in the private subnets connects over TLS with IAM database authentication. create-transaction is the only writer: it locks the account row, inserts the movement and updates the balance.',
+      flow:['apiE-fncE','fncE-dbE'] },
+    { title:'The answer comes back',
+      text:'The response carries X-Served-By-Region: us-east-2. The banking app shows the new balance and the monitor shows region and database role.',
+      flow:['~fncE-dbE','~apiE-fncE'] },
+    { title:'Meanwhile: replication to us-west-2',
+      text:'Aurora Global Database copies every commit to us-west-2 (about 1 s behind). Cognito Multi-Region Replication copies users and credentials. us-west-2 serves no traffic.',
+      flow:[['dbE-dbW','cogE-cogW']], pulse:['dbW','cogW'] },
+  ]},
+
+  { id:'outage', tab:'2. Simulate outage (fence)', start:'normal', steps:[
+    { title:'The operator starts simulate-outage',
+      text:'Actions, workflow simulate-outage: action fence, region us-east-2, typed confirmation us-east-2. GitHub assumes the organization role through OIDC.',
+      nodes:{ gh:{badge:'RUNNING', bk:'info'} }, ctl:['fncE'] },
+    { title:'This is what turns off: the six functions',
+      text:'Reserved concurrency 0 on create-transaction, list-transactions, get-stats, get-health, get-account and get-consistency. Lambda rejects every invocation in us-east-2.',
+      nodes:{ fncE:{mode:'fenced', badge:'FENCED, concurrency 0', bk:'bad'}, gh:{badge:'DONE', bk:'ok'} }, pulse:['fncE'] },
+    { title:'Everything else keeps running',
+      text:'Aurora is still the writer, API Gateway, Cognito and the VPC are healthy, and the Route 53 weights are unchanged. The outage is simulated, not reproduced: the same fence is what protects against split brain after a real failover.',
+      pulse:['dbE','apiE','cogE'] },
+    { title:'Requests still arrive in us-east-2',
+      text:'Route 53 still answers 255 / 0, API Gateway receives the call and the authorizer accepts the token, but Lambda throttles it and the client gets 429 or 5xx.',
+      flow:['b-r53','r53-apiE','apiE-cogE','!apiE-fncE'] },
+    { title:'What the users and the alarms see',
+      text:'The banking app shows "recovering" and retries with the same Idempotency-Key. The monitor shows the Unavailable banner. The lambda-throttles and api-5xx alarms go to ALARM and notify the SNS topic.',
+      nodes:{ browser:{badge:'RECOVERING...', bk:'warn'}, apiE:{mode:'alarm', badge:'ALARM 5xx / throttles', bk:'bad'} } },
+    { title:'us-west-2 is still on standby',
+      text:'Aurora reader, idle functions, Route 53 weight 0 and the Cognito replica INACTIVE. Nothing has moved yet: the failover is the next workflow.',
+      pulse:['dbW','fncW','cogW'] },
+  ]},
+
+  { id:'failover', tab:'3. Failover to us-west-2', start:'fenced', steps:[
+    { title:'The operator starts failover (to-secondary)',
+      text:'Typed confirmation "failover". Pre-checks, read only: us-east-2 must be fenced, us-west-2 must not be, and replication lag must be under 5 s.',
+      nodes:{ gh:{badge:'RUNNING', bk:'info'} }, ctl:['fncE','dbW'] },
+    { title:'The Cognito replica is activated',
+      text:'The regional configuration in us-west-2 goes from INACTIVE to ACTIVE, so the replica can sign users in with the replicated credentials.',
+      nodes:{ cogW:{mode:'normal', badge:'REPLICA ACTIVE', bk:'ok'} }, ctl:['cogW'] },
+    { title:'Planned switchover starts',
+      text:'Aurora waits until us-west-2 has caught up, then swaps the roles. Writes pause for about 35 to 40 s. No data is lost; this is a planned switchover, not a failover with data loss.',
+      nodes:{ dbE:{badge:'SWITCHING...', bk:'warn'}, dbW:{mode:'normal', badge:'SWITCHING...', bk:'warn'} }, ctl:['dbE'] },
+    { title:'Roles swapped',
+      text:'us-west-2 is now the writer and us-east-2 a reader. Replication runs in the opposite direction. The database stacks are never redeployed during a drill: RDS owns the roles.',
+      nodes:{ dbW:{mode:'normal', badge:'WRITER', bk:'ok'}, dbE:{mode:'normal', badge:'READER', bk:'idle'} },
+      edges:{ 'dbE-dbW':'off', 'dbW-dbE':'dotted' }, flow:['dbW-dbE'] },
+    { title:'Route 53 weights move to us-west-2',
+      text:'The dns stack in us-east-1 is updated to 0 / 255. It does not need us-east-2, so it works even if that region is down. The order matters: database first, traffic after. TTL is 60 s.',
+      nodes:{ apiW:{mode:'normal', badge:'SERVING', bk:'ok'}, fncW:{mode:'normal', badge:'RUNNING', bk:'ok'}, apiE:{mode:'normal', badge:'', bk:'ok'},
+              gh:{badge:'RUNNING', bk:'info'} },
+      edges:{ 'r53-apiE':'dotted', 'r53-apiW':'solid', 'apiE-cogE':'dotted', 'apiE-fncE':'dotted', 'fncE-dbE':'dotted',
+              'apiW-cogW':'solid', 'apiW-fncW':'solid', 'fncW-dbW':'solid' },
+      labels:{ 'r53-apiE':'0', 'r53-apiW':'255' }, ctl:['r53'] },
+    { title:'Validation',
+      text:'40-validate waits until GET /health?deep=true reports served_by_region = us-west-2 and database_role = writer.',
+      nodes:{ gh:{badge:'DONE', bk:'ok'} }, flow:['r53-apiW','apiW-fncW','fncW-dbW'] },
+    { title:'The users sign in again, now in us-west-2',
+      text:'The replica shares the pool and client IDs and holds the replicated credentials, so the banking app re-authenticates with its in-memory credentials against us-west-2 and keeps going.',
+      nodes:{ browser:{badge:'RE-AUTH', bk:'info'} },
+      edges:{ 'b-cogW':'solid', 'b-cogE':'dotted' }, flow:['b-cogW','~b-cogW'] },
+    { title:'The same flow, mirrored',
+      text:'Request, Route 53, API Gateway in us-west-2, the replica authorizer, Lambda, and the Aurora writer in us-west-2. The answer says X-Served-By-Region: us-west-2.',
+      nodes:{ browser:{badge:'ONLINE', bk:'ok'} },
+      flow:['b-r53','r53-apiW','apiW-cogW','apiW-fncW','fncW-dbW'] },
+    { title:'Ledger check',
+      text:'45-consistency replays the ledger: stored and replayed balance match, the chain is intact and no key is duplicated. us-east-2 stays fenced as a reader until the failback (to-primary) mirrors all of this.',
+      pulse:['dbW','dbE'] },
+  ]},
+];
+
+/* =====================================================================================================
+   ENGINE: normally no need to edit below
+   ===================================================================================================== */
+const NS = 'http://www.w3.org/2000/svg';
+const $ = (id) => document.getElementById(id);
+const svg = $('svg');
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const layers = { zones: el('g', {}, svg), edges: el('g', {}, svg), nodes: el('g', {}, svg), fx: el('g', {}, svg) };
+
+// Zones
+for (const z of ZONES) {
+  el('rect', { x:z.x, y:z.y, width:z.w, height:z.h, rx:z.inner ? 8 : 12, class:'zone', 'stroke-dasharray': z.inner ? '5 4' : '' }, layers.zones);
+  const t = el('text', { x:z.x + 12, y:z.y + (z.inner ? 18 : 20), class:'zone-label' }, layers.zones);
+  t.textContent = z.label;
+}
+
+// Edges
+const edgeEls = {}, labelEls = {};
+for (const [id, e] of Object.entries(EDGES)) {
+  edgeEls[id] = el('path', { d:e.d, class:'edge', id:'e-' + id }, layers.edges);
+  if (e.label) {
+    labelEls[id] = el('text', { x:e.lx, y:e.ly, class:'edge-label' }, layers.edges);
+    labelEls[id].textContent = e.label;
+  }
+}
+
+// Nodes
+const nodeEls = {};
+for (const [id, n] of Object.entries(NODES)) {
+  const g = el('g', { class:'node k-' + n.kind }, layers.nodes);
+  el('rect', { x:n.x, y:n.y, width:n.w, height:n.h, rx:9 }, g);
+  const t = el('text', { x:n.x + 12, y:n.y + 22, class:'t' }, g); t.textContent = n.title;
+  const sub = el('text', { x:n.x + 12, y:n.y + 40, class:'s' }, g);
+  const badge = el('g', { class:'badge idle' }, g);
+  const br = el('rect', { rx:8, height:16 }, badge);
+  const bt = el('text', { 'text-anchor':'middle', y:n.y + n.h - 10 }, badge);
+  nodeEls[id] = { g, sub, badge, br, bt, n };
+}
+function setNode(id, st) {
+  const o = nodeEls[id], n = o.n;
+  o.g.setAttribute('class', 'node k-' + n.kind + (st.mode && st.mode !== 'normal' ? ' ' + st.mode : ''));
+  const lines = (st.sub ?? n.sub ?? '').split('\n');
+  o.sub.textContent = '';
+  lines.forEach((ln, i) => { const ts = el('tspan', { x:n.x + 12, dy:i ? 14 : 0 }, o.sub); ts.textContent = ln; });
+  const text = st.badge ?? n.badge ?? '';
+  o.badge.style.display = text ? '' : 'none';
+  o.badge.setAttribute('class', 'badge ' + (st.bk ?? n.bk ?? 'idle'));
+  o.bt.textContent = text;
+  const w = text.length * 6.4 + 16;
+  o.br.setAttribute('width', w); o.br.setAttribute('x', n.x + n.w - w - 8); o.br.setAttribute('y', n.y + n.h - 24);
+  o.bt.setAttribute('x', n.x + n.w - w / 2 - 8);
+}
+
+// State handling
+function mergeState(base, delta) {
+  const out = { nodes:{ ...base.nodes }, edges:{ ...base.edges }, labels:{ ...base.labels } };
+  for (const [k, v] of Object.entries(delta.nodes || {})) out.nodes[k] = { ...(out.nodes[k] || {}), ...v };
+  Object.assign(out.edges, delta.edges || {});
+  Object.assign(out.labels, delta.labels || {});
+  return out;
+}
+function stateAt(sceneIdx, stepIdx) {
+  let st = JSON.parse(JSON.stringify(STATES[SCENES[sceneIdx].start]));
+  for (let i = 0; i <= stepIdx; i++) st = mergeState(st, SCENES[sceneIdx].steps[i]);
+  return st;
+}
+function render(st) {
+  for (const id in NODES) setNode(id, st.nodes[id] || {});
+  for (const [id, e] of Object.entries(EDGES)) {
+    edgeEls[id].setAttribute('class', 'edge ' + (st.edges[id] || e.s));
+    if (labelEls[id]) {
+      labelEls[id].textContent = st.labels[id] ?? e.label;
+      labelEls[id].style.display = (st.edges[id] || e.s) === 'off' ? 'none' : '';
+    }
+  }
+}
+
+// Animation
+let epoch = 0, speed = 1;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms / speed));
+function travel(pathEl, { reverse = false, dead = false, cls = 'packet', parent = layers.fx, r = 7 }) {
+  return new Promise((resolve) => {
+    const my = epoch, len = pathEl.getTotalLength();
+    const dur = Math.max(450, len / 0.42) / speed;
+    const stop = dead ? 0.62 : 1;
+    const dot = el('circle', { r, class:cls }, parent);
+    const t0 = performance.now();
+    (function tick(now) {
+      if (my !== epoch) { dot.remove(); return resolve(false); }
+      const p = Math.min(1, (now - t0) / dur) * stop;
+      const pt = pathEl.getPointAtLength((reverse ? 1 - p : p) * len);
+      dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y);
+      if ((now - t0) / dur < 1) return requestAnimationFrame(tick);
+      if (dead) {
+        const c = el('g', {}, parent);
+        el('line', { x1:pt.x - 9, y1:pt.y - 9, x2:pt.x + 9, y2:pt.y + 9, class:'cross' }, c);
+        el('line', { x1:pt.x - 9, y1:pt.y + 9, x2:pt.x + 9, y2:pt.y - 9, class:'cross' }, c);
+      }
+      dot.remove(); resolve(true);
+    })(t0);
+  });
+}
+async function runFlowItem(item, my) {
+  const group = Array.isArray(item) ? item : [item];
+  await Promise.all(group.map(async (raw) => {
+    const reverse = raw.startsWith('~'), dead = raw.startsWith('!');
+    const id = raw.replace(/^[~!]/, '');
+    const ok = await travel(edgeEls[id], { reverse, dead });
+    if (ok && my === epoch && !dead) edgeEls[id].classList.add('lit');
+  }));
+}
+function ctlPath(fromId, toId) {
+  if (CTL_PATHS[toId]) return CTL_PATHS[toId];
+  const a = NODES[fromId], b = NODES[toId];
+  const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x + b.w / 2, y2 = b.y + b.h / 2;
+  const cx = (x1 + x2) / 2, cy = Math.max(y1, y2) + 70;
+  return `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`;
+}
+async function runStep(si, ti) {
+  const my = ++epoch;
+  layers.fx.textContent = '';
+  const step = SCENES[si].steps[ti];
+  for (const id of step.pulse || []) {
+    const n = NODES[id];
+    const r = el('rect', { x:n.x - 3, y:n.y - 3, width:n.w + 6, height:n.h + 6, rx:11, class:'pulse-ring', style:'transform-box:fill-box;transform-origin:center' }, layers.fx);
+    r.setAttribute('data-pulse', '1');
+  }
+  const jobs = [];
+  for (const to of step.ctl || []) {
+    const p = el('path', { d:ctlPath('gh', to), class:'ctl-line' }, layers.fx);
+    jobs.push(travel(p, { cls:'ctl-packet', parent:layers.fx, r:6 }));
+  }
+  if (jobs.length) await Promise.all(jobs);
+  if (my !== epoch) return false;
+  for (const item of step.flow || []) {
+    await runFlowItem(item, my);
+    if (my !== epoch) return false;
+    await sleep(120);
+  }
+  return my === epoch;
+}
+
+// Navigation and autoplay
+let cur = { s:0, t:0 }, playing = true, timer = null;
+function buildTabs() {
+  const tabs = $('tabs');
+  SCENES.forEach((sc, i) => {
+    const b = el('button', {}, null);
+    b.className = 'tab'; b.setAttribute('role', 'tab'); b.textContent = sc.tab;
+    b.onclick = () => go(i, 0);
+    tabs.appendChild(b);
+  });
+}
+function buildDots() {
+  const d = $('dots'); d.textContent = '';
+  SCENES[cur.s].steps.forEach((_, i) => {
+    const x = document.createElement('div'); x.className = 'dot'; x.onclick = () => go(cur.s, i); d.appendChild(x);
+  });
+}
+function paintChrome() {
+  [...$('tabs').children].forEach((b, i) => b.setAttribute('aria-selected', i === cur.s));
+  [...$('dots').children].forEach((d, i) => { d.className = 'dot' + (i < cur.t ? ' done' : i === cur.t ? ' cur' : ''); });
+  const step = SCENES[cur.s].steps[cur.t];
+  $('cap-title').textContent = `${cur.t + 1}/${SCENES[cur.s].steps.length}  ${step.title}`;
+  $('cap-text').textContent = step.text;
+  $('play').textContent = playing ? 'Pause' : 'Play';
+  try { history.replaceState(null, '', `#scene=${cur.s + 1}&step=${cur.t + 1}&play=${playing ? 1 : 0}`); } catch (e) {}
+}
+async function go(s, t) {
+  clearTimeout(timer);
+  const rebuild = s !== cur.s || !$('dots').children.length;
+  cur = { s, t };
+  if (rebuild) buildDots();
+  render(stateAt(s, t));
+  paintChrome();
+  const finished = await runStep(s, t);
+  if (finished && playing) {
+    const hold = (SCENES[s].steps[t].hold ?? 1800) / speed;
+    timer = setTimeout(next, hold);
+  }
+}
+function next() {
+  const sc = SCENES[cur.s];
+  if (cur.t + 1 < sc.steps.length) return go(cur.s, cur.t + 1);
+  go((cur.s + 1) % SCENES.length, 0);
+}
+function prev() {
+  if (cur.t > 0) return go(cur.s, cur.t - 1);
+  const s = (cur.s - 1 + SCENES.length) % SCENES.length;
+  go(s, SCENES[s].steps.length - 1);
+}
+function togglePlay() {
+  playing = !playing; paintChrome();
+  if (playing) go(cur.s, cur.t); else clearTimeout(timer);
+}
+$('next').onclick = () => { playing = false; next(); };
+$('prev').onclick = () => { playing = false; prev(); };
+$('play').onclick = togglePlay;
+$('speed').onchange = (e) => { speed = parseFloat(e.target.value); };
+addEventListener('keydown', (e) => {
+  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'ArrowRight') { playing = false; next(); }
+  else if (e.key === 'ArrowLeft') { playing = false; prev(); }
+  else if (/^[1-9]$/.test(e.key) && SCENES[+e.key - 1]) go(+e.key - 1, 0);
+});
+
+buildTabs();
+const q = new URLSearchParams(location.hash.slice(1));
+const s0 = Math.min(Math.max((+q.get('scene') || 1) - 1, 0), SCENES.length - 1);
+const t0 = Math.min(Math.max((+q.get('step') || 1) - 1, 0), SCENES[s0].steps.length - 1);
+playing = q.get('play') !== '0';
+go(s0, t0);
+</script>
+</body>
+</html>

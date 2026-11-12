@@ -1,0 +1,76 @@
+{
+  "network": {
+    "Common": {
+      "EnvType": "prod"
+    },
+    "Primary": {
+      "VpcCidr": "10.40.0.0/24",
+      "SubnetCidrs": "10.40.0.0/25,10.40.0.128/25"
+    },
+    "Secondary": {
+      "VpcCidr": "10.41.0.0/24",
+      "SubnetCidrs": "10.41.0.0/25,10.41.0.128/25"
+    }
+  },
+  "database": {
+    "Common": {
+      "EnvType": "prod",
+      "DbInstanceClass": "db.r6g.large",
+      "EngineVersion": "16.15",
+      "DbName": "drdemo",
+      "DbMasterUsername": "dbadmin",
+      "DeletionProtection": "true",
+      "EnableDataApi": "false",
+      "LogRetentionDays": "30",
+      "AlertEmail": "",
+      "KeyAdminRoleArn": "",
+      "PreferredMaintenanceWindow": "sun:06:00-sun:06:30"
+    },
+    "Primary": {
+      "Role": "primary"
+    },
+    "Secondary": {
+      "Role": "secondary"
+    }
+  },
+  "cognito": {
+    "Common": {
+      "EnvType": "prod",
+      "PrimaryRegion": "us-east-2",
+      "ReplicaRegion": "us-west-2",
+      "EnableReplica": "false",
+      "KeyAdminRoleArn": ""
+    },
+    "Primary": {
+      "UserPoolDeletionProtection": "INACTIVE"
+    },
+    "Secondary": {
+      "PrimaryKeyArn": "",
+      "PrimaryUserPoolId": "",
+      "BankClientId": "",
+      "DashboardClientId": "",
+      "ReplicaAttachmentStatus": "INACTIVE"
+    }
+  },
+  "edge": {
+    "Common": {
+      "EnvType": "prod"
+    }
+  },
+  "api": {
+    "Common": {
+      "EnvType": "prod",
+      "DbName": "drdemo",
+      "DbWriterUser": "app_writer",
+      "DbReaderUser": "app_reader",
+      "LogLevel": "INFO",
+      "LogRetentionDays": "30",
+      "ThrottleRate": "20",
+      "ThrottleBurst": "40",
+      "CognitoUserPoolArn": "",
+      "CognitoBankClientId": "",
+      "CognitoDashboardClientId": "",
+      "PermissionsBoundaryArn": ""
+    }
+  }
+}

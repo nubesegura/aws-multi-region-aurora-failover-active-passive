@@ -1,0 +1,530 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  AWS DR demo - dedicated multi-region Amazon Cognito user directory template.
+  Deploys the primary User Pool, customer-managed KMS Multi-Region Key, App Clients,
+  and UserPoolReplica in us-east-2; and the KMS ReplicaKey, UserPoolRegionalConfigurationAttachment
+  (Status INACTIVE), and regional SSM parameters in us-west-2. Two-pass deployment: EnableReplica=false
+  creates the ReplicaKey first, EnableReplica=true then creates UserPoolReplica and the attachment.
+
+# Design: security design review sections 3.2, 3.12, 3.13.
+# Naming: cgnp-<rc>-drdemo-<env>, cgnc-<rc>-drdemo-<app>-<env>, alias/kms-<rc>-drdemo-cognito-<env>.
+# Mandatory tags: team-owner, project-name, app-name, repo-name, env-type.
+
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - E3006
+        - E3002
+
+Parameters:
+  EnvType:
+    Type: String
+    Description: Environment tier (env-type tag and last name segment).
+    AllowedValues: [dev, prod]
+    Default: prod
+  PrimaryRegion:
+    Type: String
+    Description: Primary region where the Cognito User Pool and primary KMS MRK are created.
+    Default: us-east-2
+  ReplicaRegion:
+    Type: String
+    Description: Standby / replica region where the KMS ReplicaKey and regional attachment are deployed.
+    Default: us-west-2
+  KeyAdminRoleArn:
+    Type: String
+    Description: Optional role ARN granted KMS key administration permissions. Empty delegates to account root.
+    Default: ""
+  PrimaryKeyArn:
+    Type: String
+    Description: ARN of the primary KMS multi-region key (required when deploying in the replica region).
+    Default: ""
+  PrimaryUserPoolId:
+    Type: String
+    Description: ID of the primary Cognito User Pool (required when deploying in the replica region).
+    Default: ""
+  BankClientId:
+    Type: String
+    Description: App client ID for banking SPA from the primary region (required when deploying in the replica region).
+    Default: ""
+  DashboardClientId:
+    Type: String
+    Description: App client ID for monitoring dashboard SPA from the primary region (required when deploying in the replica region).
+    Default: ""
+  UserPoolDeletionProtection:
+    Type: String
+    Description: Deletion protection for the primary User Pool (set INACTIVE during initial deployment or teardown).
+    AllowedValues: [ACTIVE, INACTIVE]
+    Default: INACTIVE
+  EnableReplica:
+    Type: String
+    Description: Pass 1 (false) creates the KMS ReplicaKey only; pass 2 (true) creates the UserPoolReplica and the regional attachment.
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  ReplicaAttachmentStatus:
+    Type: String
+    Description: Status of the regional configuration attachment in the replica region (ACTIVE during failover, INACTIVE in standby).
+    AllowedValues: [ACTIVE, INACTIVE]
+    Default: INACTIVE
+
+Conditions:
+  IsPrimaryRegion: !Equals [!Ref "AWS::Region", !Ref PrimaryRegion]
+  IsReplicaRegion: !Equals [!Ref "AWS::Region", !Ref ReplicaRegion]
+  IsProd: !Equals [!Ref EnvType, prod]
+  HasKeyAdmin: !Not [!Equals [!Ref KeyAdminRoleArn, ""]]
+  ReplicaEnabled: !Equals [!Ref EnableReplica, "true"]
+  CreateUserPoolReplica: !And [!Condition IsPrimaryRegion, !Condition ReplicaEnabled]
+  CreateRegionalAttachment: !And [!Condition IsReplicaRegion, !Condition ReplicaEnabled]
+
+Resources:
+  # =============================================================================================
+  # PRIMARY REGION RESOURCES (PrimaryRegion, us-east-2)
+  # =============================================================================================
+
+  # Customer managed KMS Multi-Region Key (Primary)
+  PrimaryKmsKey:
+    Type: AWS::KMS::Key
+    Condition: IsPrimaryRegion
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_33
+            comment: "Key policy is restricted to account root, key admin role, and cognito-idp/identitystore service principals scoped to this account."
+    Properties:
+      Description: !Sub "AWS DR demo - Customer-managed multi-region KMS key for Cognito user directory (${EnvType})"
+      Enabled: true
+      EnableKeyRotation: true
+      MultiRegion: true
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      PendingWindowInDays: !If [IsProd, 30, 7]
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AccountRootDelegatesToIam
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: kms:*
+            Resource: "*"
+          - Sid: KeyAdministration
+            Effect: Allow
+            Principal:
+              AWS: !If [HasKeyAdmin, !Ref KeyAdminRoleArn, !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"]
+            Action:
+              - kms:Describe*
+              - kms:PutKeyPolicy
+              - kms:Create*
+              - kms:Update*
+              - kms:Enable*
+              - kms:RevokeGrant
+              - kms:List*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:RetireGrant
+              - kms:ReplicateKey
+            Resource: "*"
+          - Sid: AllowCognitoService
+            Effect: Allow
+            Principal:
+              Service:
+                - cognito-idp.amazonaws.com
+                - identitystore.amazonaws.com
+            Action:
+              - kms:CreateGrant
+              - kms:DescribeKey
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref "AWS::AccountId"
+      Tags:
+        - { Key: team-owner, Value: nube-segura }
+        - { Key: project-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: app-name, Value: dr-demo }
+        - { Key: repo-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: env-type, Value: !Ref EnvType }
+        - Key: Name
+          Value: !Sub
+            - "kms-${RegionCode}-drdemo-cognito-${EnvType}"
+            - RegionCode: !Join ["", !Split ["-", !Ref "AWS::Region"]]
+
+  PrimaryKmsAlias:
+    Type: AWS::KMS::Alias
+    Condition: IsPrimaryRegion
+    Properties:
+      AliasName: !Sub
+        - "alias/kms-${RegionCode}-drdemo-cognito-${EnvType}"
+        - RegionCode: !Join ["", !Split ["-", !Ref "AWS::Region"]]
+      TargetKeyId: !Ref PrimaryKmsKey
+
+  # Primary Cognito User Pool
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Condition: IsPrimaryRegion
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_210
+            comment: "Synthetic demo accounts; SMS/hardware MFA is out of scope per spec 002 requirements."
+          - id: CKV_AWS_303
+            comment: "Essentials tier selected for multi-region replication; advanced security threat protection is Plus tier."
+    Properties:
+      UserPoolName: !Sub
+        - "cgnp-${RegionCode}-drdemo-${EnvType}"
+        - RegionCode: !Join ["", !Split ["-", !Ref "AWS::Region"]]
+      UserPoolTier: ESSENTIALS
+      DeletionProtection: !Ref UserPoolDeletionProtection
+      KeyConfiguration:
+        KeyType: CUSTOMER_MANAGED_KEY
+        KmsKeyArn: !GetAtt PrimaryKmsKey.Arn
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          TemporaryPasswordValidityDays: 7
+      UsernameConfiguration:
+        CaseSensitive: false
+      UserPoolTags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  # Banking App Client (Public SPA, no secret)
+  BankAppClient:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: IsPrimaryRegion
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_211
+            comment: "Public SPA client without client secret by design (ADR 0017)."
+    Properties:
+      ClientName: !Sub
+        - "cgnc-${RegionCode}-drdemo-bank-${EnvType}"
+        - RegionCode: !Join ["", !Split ["-", !Ref "AWS::Region"]]
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      IdTokenValidity: 15
+      AccessTokenValidity: 15
+      RefreshTokenValidity: 24
+      TokenValidityUnits:
+        IdToken: minutes
+        AccessToken: minutes
+        RefreshToken: hours
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+
+  # Monitoring Dashboard App Client (Public SPA, no secret)
+  DashboardAppClient:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: IsPrimaryRegion
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_211
+            comment: "Public SPA client without client secret by design (ADR 0017)."
+    Properties:
+      ClientName: !Sub
+        - "cgnc-${RegionCode}-drdemo-dash-${EnvType}"
+        - RegionCode: !Join ["", !Split ["-", !Ref "AWS::Region"]]
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      IdTokenValidity: 15
+      AccessTokenValidity: 15
+      RefreshTokenValidity: 24
+      TokenValidityUnits:
+        IdToken: minutes
+        AccessToken: minutes
+        RefreshToken: hours
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+
+  # User Pool Replica declaration in primary stack
+  UserPoolReplica:
+    Type: AWS::Cognito::UserPoolReplica
+    Condition: CreateUserPoolReplica
+    DependsOn:
+      - PrimaryKmsAlias
+    Properties:
+      RegionName: !Ref ReplicaRegion
+      UserPoolId: !Ref UserPool
+      UserPoolTagsAtCreate:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  # SSM Parameters in Primary Region (us-east-2)
+  PrimarySsmUserPoolId:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrimaryRegion
+    Properties:
+      Name: !Sub "/drdemo/${EnvType}/cognito/UserPoolId"
+      Type: String
+      Value: !Ref UserPool
+      Description: "Cognito User Pool ID (shared across primary and replica regions)"
+      Tags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  PrimarySsmUserPoolArn:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrimaryRegion
+    Properties:
+      Name: !Sub "/drdemo/${EnvType}/cognito/UserPoolArn"
+      Type: String
+      Value: !GetAtt UserPool.Arn
+      Description: "Cognito User Pool ARN for primary region (us-east-2)"
+      Tags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  PrimarySsmBankClientId:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrimaryRegion
+    Properties:
+      Name: !Sub "/drdemo/${EnvType}/cognito/BankClientId"
+      Type: String
+      Value: !Ref BankAppClient
+      Description: "Cognito App Client ID for Banking application (shared across regions)"
+      Tags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  PrimarySsmDashboardClientId:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrimaryRegion
+    Properties:
+      Name: !Sub "/drdemo/${EnvType}/cognito/DashboardClientId"
+      Type: String
+      Value: !Ref DashboardAppClient
+      Description: "Cognito App Client ID for Monitoring Dashboard application (shared across regions)"
+      Tags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  # =============================================================================================
+  # REPLICA REGION RESOURCES (us-west-2)
+  # =============================================================================================
+
+  # Customer managed KMS Replica Key in us-west-2
+  ReplicaKmsKey:
+    Type: AWS::KMS::ReplicaKey
+    Condition: IsReplicaRegion
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_33
+            comment: "Key policy is restricted to account root, key admin role, and cognito-idp/identitystore service principals scoped to this account."
+    Properties:
+      Description: !Sub "AWS DR demo - Customer-managed multi-region replica KMS key for Cognito user directory (${EnvType})"
+      Enabled: true
+      PrimaryKeyArn: !Ref PrimaryKeyArn
+      PendingWindowInDays: !If [IsProd, 30, 7]
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AccountRootDelegatesToIam
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: kms:*
+            Resource: "*"
+          - Sid: KeyAdministration
+            Effect: Allow
+            Principal:
+              AWS: !If [HasKeyAdmin, !Ref KeyAdminRoleArn, !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"]
+            Action:
+              - kms:Describe*
+              - kms:PutKeyPolicy
+              - kms:Create*
+              - kms:Update*
+              - kms:Enable*
+              - kms:RevokeGrant
+              - kms:List*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:RetireGrant
+              - kms:ReplicateKey
+            Resource: "*"
+          - Sid: AllowCognitoService
+            Effect: Allow
+            Principal:
+              Service:
+                - cognito-idp.amazonaws.com
+                - identitystore.amazonaws.com
+            Action:
+              - kms:CreateGrant
+              - kms:DescribeKey
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref "AWS::AccountId"
+      Tags:
+        - { Key: team-owner, Value: nube-segura }
+        - { Key: project-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: app-name, Value: dr-demo }
+        - { Key: repo-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: env-type, Value: !Ref EnvType }
+        - Key: Name
+          Value: !Sub
+            - "kms-${RegionCode}-drdemo-cognito-${EnvType}"
+            - RegionCode: !Join ["", !Split ["-", !Ref "AWS::Region"]]
+
+  ReplicaKmsAlias:
+    Type: AWS::KMS::Alias
+    Condition: IsReplicaRegion
+    Properties:
+      AliasName: !Sub
+        - "alias/kms-${RegionCode}-drdemo-cognito-${EnvType}"
+        - RegionCode: !Join ["", !Split ["-", !Ref "AWS::Region"]]
+      TargetKeyId: !Ref ReplicaKmsKey
+
+  # Regional Configuration Attachment for replica in us-west-2
+  UserPoolRegionalAttachment:
+    Type: AWS::Cognito::UserPoolRegionalConfigurationAttachment
+    Condition: CreateRegionalAttachment
+    DependsOn:
+      - ReplicaKmsAlias
+    Properties:
+      UserPoolId: !Ref PrimaryUserPoolId
+      Status: !Ref ReplicaAttachmentStatus
+      UserPoolTags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  # SSM Parameters in Replica Region (us-west-2)
+  ReplicaSsmUserPoolId:
+    Type: AWS::SSM::Parameter
+    Condition: CreateRegionalAttachment
+    Properties:
+      Name: !Sub "/drdemo/${EnvType}/cognito/UserPoolId"
+      Type: String
+      Value: !Ref PrimaryUserPoolId
+      Description: "Cognito User Pool ID (shared across primary and replica regions)"
+      Tags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  ReplicaSsmUserPoolArn:
+    Type: AWS::SSM::Parameter
+    Condition: CreateRegionalAttachment
+    Properties:
+      Name: !Sub "/drdemo/${EnvType}/cognito/UserPoolArn"
+      Type: String
+      Value: !Sub "arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${PrimaryUserPoolId}"
+      Description: "Cognito User Pool ARN for replica region (us-west-2)"
+      Tags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  ReplicaSsmBankClientId:
+    Type: AWS::SSM::Parameter
+    Condition: CreateRegionalAttachment
+    Properties:
+      Name: !Sub "/drdemo/${EnvType}/cognito/BankClientId"
+      Type: String
+      Value: !Ref BankClientId
+      Description: "Cognito App Client ID for Banking application (shared across regions)"
+      Tags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  ReplicaSsmDashboardClientId:
+    Type: AWS::SSM::Parameter
+    Condition: CreateRegionalAttachment
+    Properties:
+      Name: !Sub "/drdemo/${EnvType}/cognito/DashboardClientId"
+      Type: String
+      Value: !Ref DashboardClientId
+      Description: "Cognito App Client ID for Monitoring Dashboard application (shared across regions)"
+      Tags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+# ===============================================================================================
+# OUTPUTS
+# ===============================================================================================
+Outputs:
+  UserPoolId:
+    Description: Cognito User Pool ID.
+    Value: !If [IsPrimaryRegion, !Ref UserPool, !Ref PrimaryUserPoolId]
+  UserPoolArn:
+    Description: Regional Cognito User Pool ARN.
+    Value: !If
+      - IsPrimaryRegion
+      - !GetAtt UserPool.Arn
+      - !Sub "arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${PrimaryUserPoolId}"
+  BankClientId:
+    Description: App Client ID for Banking SPA.
+    Value: !If [IsPrimaryRegion, !Ref BankAppClient, !Ref BankClientId]
+  DashboardClientId:
+    Description: App Client ID for Monitoring Dashboard SPA.
+    Value: !If [IsPrimaryRegion, !Ref DashboardAppClient, !Ref DashboardClientId]
+  KmsKeyArn:
+    Condition: IsPrimaryRegion
+    Description: Customer managed KMS Key ARN in primary region (us-east-2).
+    Value: !GetAtt PrimaryKmsKey.Arn
+  ReplicaKmsKeyArn:
+    Condition: IsReplicaRegion
+    Description: Customer managed KMS Replica Key ARN in replica region (us-west-2).
+    Value: !GetAtt ReplicaKmsKey.Arn

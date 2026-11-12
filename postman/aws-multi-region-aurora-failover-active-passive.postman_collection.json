@@ -1,0 +1,1326 @@
+{
+  "info": {
+    "name": "AWS DR demo API",
+    "description": "Requests and tests for the AWS DR demo API (banking ledger on an Aurora Global Database, two regions). Set the environment variables baseUrl (https://<api domain>, no trailing slash) and cognito_id_token (secret, a Cognito ID token of a demo user). Every application response carries X-Served-By-Region. Amounts and balances are strings with two decimals. Run folders 01 to 03 in order for functional checks (02 starts with a deposit that later requests rely on) and folder 04 during the DR drill.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Health",
+      "item": [
+        {
+          "name": "Health (shallow)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Body has status ok and a region\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.be.a(\"string\");",
+                  "    pm.expect(body.region).to.be.a(\"string\");",
+                  "});",
+                  "pm.test(\"Shallow health does not touch the database\", function () {",
+                  "    pm.expect(pm.response.json()).to.not.have.property(\"database_role\");",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Liveness of the Lambda in whichever region Route 53 currently selects. Does not touch the database. Use it first in the drill to confirm the API answers."
+          }
+        },
+        {
+          "name": "Health (deep)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Body has status, region and database_role\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.be.a(\"string\");",
+                  "    pm.expect(body.region).to.be.a(\"string\");",
+                  "    pm.expect(body).to.have.property(\"database_role\");",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health?deep=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ],
+              "query": [
+                {
+                  "key": "deep",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Also checks the database and returns its role (writer or read-only replica). Use it before the drill (pre-checks) and after the promotion to confirm the new writer."
+          }
+        },
+        {
+          "name": "Missing token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Body is the API Gateway authorizer rejection, not an application response\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.not.have.property(\"balance\");",
+                  "    pm.expect(body).to.not.have.property(\"served_by_region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "account"
+              ]
+            },
+            "description": "Calls GET /account without the Authorization header. The Cognito authorizer rejects it with 401 before any Lambda runs, so the response has no X-Served-By-Region header and no account data."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Transactions",
+      "item": [
+        {
+          "name": "Create deposit",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const key = \"drdemo-\" + Date.now() + \"-\" + Math.random().toString(36).slice(2, 10);",
+                  "const amount = ((Math.floor(Math.random() * 99900) + 100) / 100).toFixed(2);",
+                  "pm.collectionVariables.set(\"idempotencyKey\", key);",
+                  "pm.collectionVariables.set(\"lastAmount\", amount);",
+                  "pm.collectionVariables.set(\"lastTransactionId\", \"\");",
+                  "pm.collectionVariables.set(\"lastBalance\", \"\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response has the documented fields\", function () {",
+                  "    const body = pm.response.json();",
+                  "    [\"id\", \"type\", \"amount\", \"balance_after\", \"processed_at\", \"processed_region\"].forEach(function (name) {",
+                  "        pm.expect(body.transaction).to.have.property(name);",
+                  "    });",
+                  "    [\"balance\", \"served_by_region\", \"database_role\", \"server_ms\"].forEach(function (name) {",
+                  "        pm.expect(body).to.have.property(name);",
+                  "    });",
+                  "});",
+                  "pm.test(\"Transaction is the requested deposit\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.transaction.type).to.eql(\"deposit\");",
+                  "    pm.expect(body.transaction.amount).to.eql(pm.collectionVariables.get(\"lastAmount\"));",
+                  "    pm.expect(body.database_role).to.eql(\"writer\");",
+                  "});",
+                  "pm.test(\"Amounts and balances are strings with two decimals\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.transaction.amount).to.match(/^\\d+\\.\\d{2}$/);",
+                  "    pm.expect(body.transaction.balance_after).to.match(/^\\d+\\.\\d{2}$/);",
+                  "    pm.expect(body.balance).to.match(/^\\d+\\.\\d{2}$/);",
+                  "    pm.expect(body.balance).to.eql(body.transaction.balance_after);",
+                  "    pm.collectionVariables.set(\"lastTransactionId\", body.transaction.id);",
+                  "    pm.collectionVariables.set(\"lastBalance\", body.balance);",
+                  "});",
+                  "pm.test(\"processed_region and served_by_region match X-Served-By-Region\", function () {",
+                  "    const served = pm.response.headers.get(\"X-Served-By-Region\");",
+                  "    pm.expect(pm.response.json().transaction.processed_region).to.eql(served);",
+                  "    pm.expect(pm.response.json().served_by_region).to.eql(served);",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "Generates a fresh Idempotency-Key (collection variable idempotencyKey) and a random amount with two decimals (lastAmount), then deposits it. Expects 201 and stores the transaction id (lastTransactionId) and the balance (lastBalance) for the repeat request. Run it before 'Repeat deposit with the same key'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": {{lastAmount}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Repeat deposit with the same key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 (idempotent repeat, not 201)\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Same transaction id as the original request\", function () {",
+                  "    const original = pm.collectionVariables.get(\"lastTransactionId\");",
+                  "    pm.expect(original, \"run 'Create deposit' first\").to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(pm.response.json().transaction.id).to.eql(original);",
+                  "});",
+                  "pm.test(\"Same balance as the original request (the deposit was applied once)\", function () {",
+                  "    const balance = pm.collectionVariables.get(\"lastBalance\");",
+                  "    pm.expect(balance, \"run 'Create deposit' first\").to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(pm.response.json().balance).to.eql(balance);",
+                  "    pm.expect(pm.response.json().transaction.balance_after).to.eql(balance);",
+                  "});",
+                  "pm.test(\"Transaction is still the original deposit\", function () {",
+                  "    pm.expect(pm.response.json().transaction.type).to.eql(\"deposit\");",
+                  "    pm.expect(pm.response.json().transaction.amount).to.eql(pm.collectionVariables.get(\"lastAmount\"));",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "Sends the same Idempotency-Key and body as the last 'Create deposit'. Expects 200 with the original transaction id and balance (no second movement). Do not regenerate the key between the two requests.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": {{lastAmount}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create withdrawal",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"withdrawKey\", \"drdemo-w-\" + Date.now() + \"-\" + Math.random().toString(36).slice(2, 10));",
+                  "pm.collectionVariables.set(\"balanceBeforeWithdrawal\", pm.collectionVariables.get(\"lastBalance\") || \"\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Transaction is a withdrawal of 1.00\", function () {",
+                  "    const body = pm.response.json();",
+                  "    [\"id\", \"type\", \"amount\", \"balance_after\", \"processed_at\", \"processed_region\"].forEach(function (name) {",
+                  "        pm.expect(body.transaction).to.have.property(name);",
+                  "    });",
+                  "    pm.expect(body.transaction.type).to.eql(\"withdrawal\");",
+                  "    pm.expect(body.transaction.amount).to.eql(\"1.00\");",
+                  "    pm.expect(body.balance).to.match(/^\\d+\\.\\d{2}$/);",
+                  "    pm.expect(body.balance).to.eql(body.transaction.balance_after);",
+                  "});",
+                  "pm.test(\"Balance dropped by exactly the amount withdrawn\", function () {",
+                  "    const before = pm.collectionVariables.get(\"balanceBeforeWithdrawal\");",
+                  "    pm.expect(before, \"run 'Create deposit' first\").to.be.a(\"string\").and.not.empty;",
+                  "    const cents = function (text) { return Math.round(Number(text) * 100); };",
+                  "    pm.expect(cents(pm.response.json().balance)).to.eql(cents(before) - 100);",
+                  "});",
+                  "pm.test(\"processed_region matches X-Served-By-Region\", function () {",
+                  "    pm.expect(pm.response.json().transaction.processed_region).to.eql(pm.response.headers.get(\"X-Served-By-Region\"));",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{withdrawKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "Withdraws 1.00 with a fresh Idempotency-Key. Run it after 'Create deposit' (which leaves at least 1.00 in the account). Expects 201, type withdrawal and a balance 1.00 lower than before.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"withdrawal\",\n  \"amount\": 1.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create deposit (no Idempotency-Key)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"noKeyAmount\", ((Math.floor(Math.random() * 99900) + 100) / 100).toFixed(2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response has a transaction id and a balance\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.transaction.id).to.be.a(\"string\");",
+                  "    pm.expect(body.transaction.type).to.eql(\"deposit\");",
+                  "    pm.expect(body.balance).to.match(/^\\d+\\.\\d{2}$/);",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "Deposits without an Idempotency-Key header. Expects 201 (the request is not protected against a retry).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": {{noKeyAmount}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Overdraft: withdrawal above the balance",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"overdraftBalance\", \"\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"error.code is insufficient_funds and error.balance is the current balance\", function () {",
+                  "    const error = pm.response.json().error;",
+                  "    pm.expect(error.code).to.eql(\"insufficient_funds\");",
+                  "    pm.expect(error.balance).to.match(/^\\d+\\.\\d{2}$/);",
+                  "    pm.collectionVariables.set(\"overdraftBalance\", error.balance);",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "Withdraws 9999999999.99 (the maximum amount), which is above any balance the demo can reach. Expects 422 insufficient_funds with the current balance, saved in overdraftBalance. The next request, 'Overdraft: balance is unchanged', checks the account.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"withdrawal\",\n  \"amount\": 9999999999.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Overdraft: balance is unchanged",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Balance equals the balance reported by the rejected withdrawal\", function () {",
+                  "    const before = pm.collectionVariables.get(\"overdraftBalance\");",
+                  "    pm.expect(before, \"run 'Overdraft: withdrawal above the balance' first\").to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(pm.response.json().balance).to.eql(before);",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "account"
+              ]
+            },
+            "description": "Run right after 'Overdraft: withdrawal above the balance'. The balance must equal the one saved from the 422 response: the rejected withdrawal changed nothing."
+          }
+        },
+        {
+          "name": "Invalid: type not allowed",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"error.code is validation_error\", function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql(\"validation_error\");",
+                  "});",
+                  "pm.test(\"error.fields reports 'type'\", function () {",
+                  "    const fields = pm.response.json().error.fields;",
+                  "    pm.expect(fields).to.be.an(\"array\");",
+                  "    pm.expect(fields.map(function (f) { return f.field; })).to.include(\"type\");",
+                  "    fields.forEach(function (f) { pm.expect(f.message).to.be.a(\"string\"); });",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "type must be deposit or withdrawal. Expects 400 validation_error and an error.fields entry for 'type'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"transfer\",\n  \"amount\": 10.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Invalid: amount with 3 decimals",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"error.code is validation_error\", function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql(\"validation_error\");",
+                  "});",
+                  "pm.test(\"error.fields reports 'amount'\", function () {",
+                  "    const fields = pm.response.json().error.fields;",
+                  "    pm.expect(fields).to.be.an(\"array\");",
+                  "    pm.expect(fields.map(function (f) { return f.field; })).to.include(\"amount\");",
+                  "    fields.forEach(function (f) { pm.expect(f.message).to.be.a(\"string\"); });",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "Amounts allow at most two decimals. Expects 400 validation_error and an error.fields entry for 'amount'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": 1.005\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Invalid: negative amount",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"error.code is validation_error\", function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql(\"validation_error\");",
+                  "});",
+                  "pm.test(\"error.fields reports 'amount'\", function () {",
+                  "    const fields = pm.response.json().error.fields;",
+                  "    pm.expect(fields).to.be.an(\"array\");",
+                  "    pm.expect(fields.map(function (f) { return f.field; })).to.include(\"amount\");",
+                  "    fields.forEach(function (f) { pm.expect(f.message).to.be.a(\"string\"); });",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "A negative amount must be rejected with 400 validation_error and error.fields naming 'amount'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": -5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Invalid: unknown field",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"error.code is validation_error\", function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql(\"validation_error\");",
+                  "});",
+                  "pm.test(\"error.fields reports 'note'\", function () {",
+                  "    const fields = pm.response.json().error.fields;",
+                  "    pm.expect(fields).to.be.an(\"array\");",
+                  "    pm.expect(fields.map(function (f) { return f.field; })).to.include(\"note\");",
+                  "    fields.forEach(function (f) { pm.expect(f.message).to.be.a(\"string\"); });",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "Unknown properties are rejected. Expects 400 and a field error naming the unknown field 'note'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": 10.00,\n  \"note\": \"not allowed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List transactions (limit=5)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"items is an array of at most 5 records\", function () {",
+                  "    const items = pm.response.json().items;",
+                  "    pm.expect(items).to.be.an(\"array\");",
+                  "    pm.expect(items.length).to.be.at.most(5);",
+                  "    items.forEach(function (item) {",
+                  "        [\"id\", \"type\", \"amount\", \"balance_after\", \"processed_at\", \"processed_region\"].forEach(function (name) {",
+                  "            pm.expect(item).to.have.property(name);",
+                  "        });",
+                  "        pm.expect(item.amount).to.match(/^\\d+\\.\\d{2}$/);",
+                  "        pm.expect(item.balance_after).to.match(/^\\d+\\.\\d{2}$/);",
+                  "    });",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions?limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Newest movements first, at most 5. Response is {items: [...]}. Use it after the drill to confirm writes landed in the new region (processed_region)."
+          }
+        },
+        {
+          "name": "List transactions (invalid limit)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"error.fields reports 'limit'\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error.code).to.eql(\"validation_error\");",
+                  "    pm.expect(body.error.fields.map(function (f) { return f.field; })).to.include(\"limit\");",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions?limit=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "abc"
+                }
+              ]
+            },
+            "description": "limit must be an integer between 1 and 100. Expects 400 validation_error naming 'limit'."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Account, consistency and stats",
+      "item": [
+        {
+          "name": "Get account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Body has balance, movement_count, served_by_region and database_role\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.balance).to.match(/^\\d+\\.\\d{2}$/);",
+                  "    pm.expect(body.movement_count).to.be.a(\"number\");",
+                  "    pm.expect(body.served_by_region).to.be.a(\"string\");",
+                  "    pm.expect(body.database_role).to.be.a(\"string\");",
+                  "});",
+                  "pm.test(\"served_by_region matches X-Served-By-Region\", function () {",
+                  "    pm.expect(pm.response.json().served_by_region).to.eql(pm.response.headers.get(\"X-Served-By-Region\"));",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "account"
+              ]
+            },
+            "description": "Current balance (string with two decimals), number of movements, serving region and database role."
+          }
+        },
+        {
+          "name": "Get consistency report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Report has every documented field\", function () {",
+                  "    const body = pm.response.json();",
+                  "    [\"count\", \"total_deposited\", \"total_withdrawn\", \"replayed_balance\", \"stored_balance\", \"balances_match\", \"chain_ok\", \"duplicate_keys\", \"counts_by_region\", \"consistent\", \"first_offender\", \"truncated\", \"served_by_region\"].forEach(function (name) {",
+                  "        pm.expect(body).to.have.property(name);",
+                  "    });",
+                  "    pm.expect(body.counts_by_region).to.be.an(\"object\");",
+                  "});",
+                  "pm.test(\"The ledger is consistent\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.consistent).to.eql(true);",
+                  "    pm.expect(body.balances_match).to.eql(true);",
+                  "    pm.expect(body.chain_ok).to.eql(true);",
+                  "    pm.expect(body.duplicate_keys).to.eql(0);",
+                  "    pm.expect(body.first_offender).to.eql(null);",
+                  "    pm.expect(body.truncated).to.eql(false);",
+                  "});",
+                  "pm.test(\"Replayed balance equals the stored balance\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.replayed_balance).to.match(/^\\d+\\.\\d{2}$/);",
+                  "    pm.expect(body.replayed_balance).to.eql(body.stored_balance);",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consistency",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consistency"
+              ]
+            },
+            "description": "Replays the ledger and compares it with the stored balance. After the functional requests it must report consistent true. Also run it after the DR drill, in the new region."
+          }
+        },
+        {
+          "name": "Get stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Body has every documented stats field\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.total_count).to.be.a(\"number\");",
+                  "    pm.expect(body.counts_by_region).to.be.an(\"object\");",
+                  "    pm.expect(body.last_processed_at_by_region).to.be.an(\"object\");",
+                  "    pm.expect(body.latest_transactions).to.be.an(\"array\");",
+                  "    pm.expect(body.served_by_region).to.be.a(\"string\");",
+                  "    pm.expect(body.database_role).to.be.a(\"string\");",
+                  "    pm.expect(body.generated_at).to.be.a(\"string\");",
+                  "});",
+                  "pm.test(\"Latest transactions use the movement shape\", function () {",
+                  "    pm.response.json().latest_transactions.forEach(function (item) {",
+                  "        [\"id\", \"type\", \"amount\", \"balance_after\", \"processed_at\", \"processed_region\"].forEach(function (name) {",
+                  "            pm.expect(item).to.have.property(name);",
+                  "        });",
+                  "    });",
+                  "});",
+                  "pm.test(\"Header X-Served-By-Region is present\", function () {",
+                  "    pm.response.to.have.header(\"X-Served-By-Region\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "stats"
+              ]
+            },
+            "description": "Totals, counts and last processed time per region, latest movements, serving region and database role. The monitoring dashboard uses the same endpoint."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 DR drill",
+      "item": [
+        {
+          "name": "Drill: where am I served from (stats)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "console.log(\"[DR drill] served_by_region=\" + body.served_by_region + \" database_role=\" + body.database_role);",
+                  "pm.test(\"Status is 200 (or a 503 while the database is switching)\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                  "});",
+                  "pm.test(\"Response carries the drill fields\", function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        pm.expect(body.served_by_region).to.be.a(\"string\");",
+                  "        pm.expect(body.database_role).to.be.a(\"string\");",
+                  "    } else {",
+                  "        pm.expect(body.error.code).to.be.oneOf([\"database_read_only\", \"database_busy\", \"database_unavailable\"]);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "stats"
+              ]
+            },
+            "description": "Prints served_by_region and database_role in the Postman console (View > Show Postman Console). Asserts nothing about which region, so it passes before and after failover. Run it repeatedly during the drill, after each DNS change (allow for DNS TTL)."
+          }
+        },
+        {
+          "name": "Drill: health deep (region and role)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "console.log(\"[DR drill] region=\" + body.region + \" database_role=\" + body.database_role + \" status=\" + body.status);",
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Body has region and database_role (no assertion on which)\", function () {",
+                  "    pm.expect(body.region).to.be.a(\"string\");",
+                  "    pm.expect(body).to.have.property(\"database_role\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health?deep=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ],
+              "query": [
+                {
+                  "key": "deep",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Prints region and database_role to the console without asserting which. Use right after promoting the secondary to see the role flip on the new writer."
+          }
+        },
+        {
+          "name": "Drill: write probe",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const served = pm.response.headers.get(\"X-Served-By-Region\");",
+                  "console.log(\"[DR drill] write status=\" + pm.response.code + \" served_by=\" + served);",
+                  "pm.test(\"Write succeeds (201) or is refused as 503 during the switch\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 503]);",
+                  "});",
+                  "pm.test(\"A 201 carries the new deposit and the balance\", function () {",
+                  "    if (pm.response.code === 201) {",
+                  "        const body = pm.response.json();",
+                  "        pm.expect(body.transaction.type).to.eql(\"deposit\");",
+                  "        pm.expect(body.balance).to.match(/^\\d+\\.\\d{2}$/);",
+                  "    }",
+                  "});",
+                  "pm.test(\"A 503 uses the documented error codes and Retry-After for read-only and busy\", function () {",
+                  "    if (pm.response.code === 503) {",
+                  "        const code = pm.response.json().error.code;",
+                  "        pm.expect(code).to.be.oneOf([\"database_read_only\", \"database_busy\", \"database_unavailable\"]);",
+                  "        if (code === \"database_read_only\" || code === \"database_busy\") { pm.response.to.have.header(\"Retry-After\"); }",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ]
+            },
+            "description": "Deposits 1.00 with a unique key and prints the serving region. Accepts 201, or 503 while the database is read-only, busy or unreachable during the switch. Use it to see when writes resume after promotion.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": 1.00\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Drill: header matches body region",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"X-Served-By-Region header equals body served_by_region\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"X-Served-By-Region\")).to.eql(pm.response.json().served_by_region);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cognito_id_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "stats"
+              ]
+            },
+            "description": "Asserts the response header X-Served-By-Region equals body served_by_region. Passes in either region; a failure means the header and the handler disagree."
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "idempotencyKey",
+      "value": ""
+    },
+    {
+      "key": "lastAmount",
+      "value": ""
+    },
+    {
+      "key": "lastTransactionId",
+      "value": ""
+    },
+    {
+      "key": "lastBalance",
+      "value": ""
+    },
+    {
+      "key": "withdrawKey",
+      "value": ""
+    },
+    {
+      "key": "balanceBeforeWithdrawal",
+      "value": ""
+    },
+    {
+      "key": "noKeyAmount",
+      "value": ""
+    },
+    {
+      "key": "overdraftBalance",
+      "value": ""
+    }
+  ]
+}

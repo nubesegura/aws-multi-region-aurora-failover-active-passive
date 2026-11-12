@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  DR demo network stack. Private VPC with two private subnets (one per Availability Zone) and their route tables.
+  No internet gateway, NAT, endpoints or peering (design C32). Deployed once per data region, before the database stack.
+# Naming: names are <acronym>-<region without dashes>-drdemo-<descriptor>-<EnvType>. The region code is derived from
+# AWS::Region with Join/Split, so no region, account or environment literal appears in this template.
+# The CIDRs come from parameters/prod.json and follow the IP plan of the organization (no overlap with other projects).
+
+Parameters:
+  EnvType:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, prod]
+    Description: Environment tier, used in names and in the env-type tag. Project rule is dev and prod only.
+  VpcCidr:
+    Type: String
+    AllowedPattern: ^(10|172|192)\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/(2[0-8])$
+    Description: VPC CIDR. Must differ between the two regions and from every other project (IP plan).
+  SubnetCidrs:
+    Type: CommaDelimitedList
+    Description: Exactly two private subnet CIDRs inside VpcCidr (one per Availability Zone).
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+        - Key: Name
+          Value: !Sub ['vpc-${RC}-drdemo-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Select [0, !Ref SubnetCidrs]
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+        - Key: Name
+          Value: !Sub ['snet-${RC}-drdemo-az1-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Select [1, !Ref SubnetCidrs]
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+        - Key: Name
+          Value: !Sub ['snet-${RC}-drdemo-az2-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+
+  RouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+        - Key: Name
+          Value: !Sub ['rtb-${RC}-drdemo-az1-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+
+  RouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+        - Key: Name
+          Value: !Sub ['rtb-${RC}-drdemo-az2-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+
+  RouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTableA
+
+  RouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTableB
+
+Outputs:
+  VpcId:
+    Description: VPC id.
+    Value: !Ref Vpc
+  VpcCidr:
+    Description: VPC CIDR.
+    Value: !GetAtt Vpc.CidrBlock
+  PrivateSubnetIds:
+    Description: Private subnet ids, comma separated (database subnet group and Lambda functions).
+    Value: !Join [',', [!Ref SubnetA, !Ref SubnetB]]

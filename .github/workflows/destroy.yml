@@ -1,0 +1,120 @@
+# Destroy workflow of the DR demo (requirements 8.5, 8.6 and spec 002 requirement 1.9). Manual only and double confirmed by typing two phrases.
+# It runs scripts/destroy.sh: deletion protection off (first, confirmed), dns, api stacks, cognito stacks (deletion protection
+# lifted, replica deleted before primary, KMS keys scheduled for deletion), detach of every global cluster member
+# (live roles), database stacks (final snapshots), edge (primary region; buckets emptied with all versions), artifact buckets and the
+# bootstrap stacks of the two data regions, then it lists the leftovers to delete by hand.
+#
+# The bootstrap stack of the global region (deploy role, execution role) is NOT deleted here: this
+# workflow runs under that role. Delete it by hand with the owner's credentials afterwards.
+#
+# Runs only from refs/heads/main. Required in the GitHub Environment "prod" (same names as deploy.yml):
+#   Variables: AWS_REGION_PRIMARY AWS_REGION_SECONDARY AWS_REGION_GLOBAL (HOSTED_ZONE_ID optional: lists the ACM records)
+#   Secret:    AWS_ROLE_ARN
+# Inputs: confirm = destroy-aws-multi-region-aurora-failover-active-passive ; confirm_deletion_protection = disable-deletion-protection
+#
+# The deploy role session lasts one hour, so the work is split in three groups with a fresh OIDC login before each.
+name: destroy
+
+# checkov:skip=CKV_GHA_7: the inputs are the typed confirmation phrases of a destroy; they do not influence any build output
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type destroy-aws-multi-region-aurora-failover-active-passive to delete the whole demo"
+        required: true
+        type: string
+      confirm_deletion_protection:
+        description: "Type disable-deletion-protection to switch deletion protection off first"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: drdemo-prod-infrastructure
+  cancel-in-progress: false
+
+jobs:
+  destroy:
+    name: destroy prod
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION_PRIMARY: ${{ vars.AWS_REGION_PRIMARY }}
+      AWS_REGION_SECONDARY: ${{ vars.AWS_REGION_SECONDARY }}
+      AWS_REGION_GLOBAL: ${{ vars.AWS_REGION_GLOBAL }}
+      HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+      CONFIRM: ${{ inputs.confirm }}
+      CONFIRM_DELETION_PROTECTION: ${{ inputs.confirm_deletion_protection }}
+    steps:
+      - name: Validate the branch, the required variables, secrets and confirmations
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error title=Wrong branch::this workflow runs only from refs/heads/main (got ${GITHUB_REF//[^A-Za-z0-9_\/.-]/?})"
+            exit 1
+          fi
+          missing=()
+          for name in AWS_REGION_PRIMARY AWS_REGION_SECONDARY AWS_REGION_GLOBAL; do
+            if [[ -z "${!name:-}" ]]; then missing+=("variable ${name}"); fi
+          done
+          if [[ -z "${AWS_ROLE_ARN:-}" ]]; then missing+=("secret AWS_ROLE_ARN"); fi
+          if ((${#missing[@]} > 0)); then
+            echo "::error title=Missing configuration in the prod environment::${missing[*]}"
+            echo "The GitHub Environment 'prod' does not define:"
+            printf '  - %s\n' "${missing[@]}"
+            exit 1
+          fi
+          if [[ "${CONFIRM}" != "destroy-aws-multi-region-aurora-failover-active-passive" ]]; then
+            echo "::error title=Confirmation missing::the input 'confirm' must be exactly: destroy-aws-multi-region-aurora-failover-active-passive"
+            exit 1
+          fi
+          if [[ "${CONFIRM_DELETION_PROTECTION}" != "disable-deletion-protection" ]]; then
+            echo "::error title=Confirmation missing::the input 'confirm_deletion_protection' must be exactly: disable-deletion-protection"
+            exit 1
+          fi
+          echo "Configuration and confirmations are in place."
+
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: AWS login (group 1)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION_GLOBAL }}
+          role-duration-seconds: 3600
+      - name: Group 1 - deletion protection off, dns, api and cognito stacks
+        run: |
+          bash scripts/destroy.sh --steps 1-3 --confirm "${CONFIRM}" \
+            --confirm-deletion-protection "${CONFIRM_DELETION_PROTECTION}"
+
+      - name: AWS login (group 2)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION_GLOBAL }}
+          role-duration-seconds: 3600
+      - name: Group 2 - detach the global cluster members; database, network and edge stacks at the same time
+        run: |
+          bash scripts/destroy.sh --steps 4-6 --eni-wait-seconds 180 --confirm "${CONFIRM}" \
+            --confirm-deletion-protection "${CONFIRM_DELETION_PROTECTION}"
+
+      - name: AWS login (group 3)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION_GLOBAL }}
+          role-duration-seconds: 3600
+      - name: Group 3 - artifact buckets, bootstrap stacks of the data regions, leftovers
+        run: |
+          bash scripts/destroy.sh --steps 7-8 --confirm "${CONFIRM}" \
+            --confirm-deletion-protection "${CONFIRM_DELETION_PROTECTION}"

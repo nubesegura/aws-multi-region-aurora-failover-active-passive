@@ -1,0 +1,62 @@
+[importlinter]
+root_packages =
+    dr_demo
+    services
+include_external_packages = True
+
+[importlinter:contract:domain-is-pure]
+name = The domain imports nothing from the outer layers or from AWS/IO libraries
+type = forbidden
+source_modules =
+    dr_demo.domain
+forbidden_modules =
+    dr_demo.application
+    dr_demo.adapters
+    dr_demo.config
+    boto3
+    botocore
+    pg8000
+
+[importlinter:contract:application-is-pure]
+name = The application layer imports no adapters, configuration or AWS/IO libraries
+type = forbidden
+source_modules =
+    dr_demo.application
+forbidden_modules =
+    dr_demo.adapters
+    dr_demo.config
+    boto3
+    botocore
+    pg8000
+
+[importlinter:contract:adapters-are-independent]
+name = Inbound and outbound adapters never import each other
+type = independence
+modules =
+    dr_demo.adapters.inbound
+    dr_demo.adapters.outbound
+
+[importlinter:contract:inbound-has-no-infrastructure]
+name = Inbound adapters import no AWS/IO libraries and no configuration
+type = forbidden
+source_modules =
+    dr_demo.adapters.inbound
+forbidden_modules =
+    dr_demo.config
+    boto3
+    botocore
+    pg8000
+
+[importlinter:contract:handlers-are-thin]
+name = Handlers only reach the composition root and the inbound adapter types
+type = forbidden
+source_modules =
+    services
+forbidden_modules =
+    dr_demo.domain
+    dr_demo.application
+    dr_demo.adapters.outbound
+    boto3
+    botocore
+    pg8000
+allow_indirect_imports = True

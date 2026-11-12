@@ -1,0 +1,128 @@
+# Deploy workflow of the DR demo (requirement 8.2). Manual only: a push to main never deploys, because the stack costs
+# money while it runs (about USD 13-15 per day, see the README).
+#
+# REQUIRED CONFIGURATION in the GitHub Environment "prod" (Settings > Environments > prod). The first step fails with a
+# clear message when something below is missing. Nothing here is read from the repository files.
+#
+#   Variables (Environment variables):
+#     AWS_REGION_PRIMARY    region of the primary database, API, Cognito pool and edge (static sites) for example us-east-2
+#     AWS_REGION_SECONDARY  region of the secondary database and API at creation      for example us-west-2
+#     AWS_REGION_GLOBAL     region of the dns stack and of the bootstrap stack (deploy role) for example us-east-1
+#     API_DOMAIN_NAME       custom domain of the API (host name inside the hosted zone)  for example api.example.com
+#     HOSTED_ZONE_ID        Route 53 public hosted zone id that contains API_DOMAIN_NAME
+#     DB_INSTANCE_CLASS     optional, default db.r6g.large (never db.t*: Global Database does not support them)
+#     ENGINE_VERSION        optional, default 16.15 (Aurora PostgreSQL; must support Global Database in both regions)
+#     ALERT_EMAIL           optional, e-mail subscribed to the alert topics (empty: no subscription)
+#
+#   Secrets (Environment secrets):
+#     AWS_ROLE_ARN          ARN of the deploy role created by the one-time bootstrap (output DeployRoleArn)
+#
+#   Authentication uses Amazon Cognito Multi-Region Replication (spec 002): the cognito step deploys the primary
+#   User Pool in AWS_REGION_PRIMARY and the replica configuration in AWS_REGION_SECONDARY in two passes (the KMS
+#   replica key first, then the pool replica) and finishes with deletion protection ACTIVE, publishing the regional
+#   User Pool ARN and App Client IDs to SSM (/drdemo/prod/cognito/*). The api step reads those SSM parameters and
+#   passes them to each regional API stack.
+#
+# One-time owner steps outside this workflow: deploy templates/bootstrap.yaml in the global region with
+# CreateDeployRole=true (creates the deploy role and the CloudFormation execution role), and set the Environment
+# protection rules (required reviewers, deployment branch main). See the README.
+# Account baseline (repository nubesegura-accounts-baseline): the GitHub OIDC provider and the API Gateway CloudWatch
+# Logs role of each data region must exist before this workflow runs.
+#
+# The deploy role session lasts one hour, so the work is split in three groups with a fresh OIDC login before each.
+name: deploy
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: drdemo-prod-infrastructure
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy prod
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION_PRIMARY: ${{ vars.AWS_REGION_PRIMARY }}
+      AWS_REGION_SECONDARY: ${{ vars.AWS_REGION_SECONDARY }}
+      AWS_REGION_GLOBAL: ${{ vars.AWS_REGION_GLOBAL }}
+      API_DOMAIN_NAME: ${{ vars.API_DOMAIN_NAME }}
+      HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+      DB_INSTANCE_CLASS: ${{ vars.DB_INSTANCE_CLASS }}
+      ENGINE_VERSION: ${{ vars.ENGINE_VERSION }}
+      ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+      SAM_CLI_TELEMETRY: "0"
+    steps:
+      - name: Validate the branch, the required variables and secrets
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error title=Wrong branch::this workflow runs only from refs/heads/main (got ${GITHUB_REF//[^A-Za-z0-9_\/.-]/?})"
+            exit 1
+          fi
+          missing=()
+          for name in AWS_REGION_PRIMARY AWS_REGION_SECONDARY AWS_REGION_GLOBAL API_DOMAIN_NAME HOSTED_ZONE_ID; do
+            if [[ -z "${!name:-}" ]]; then missing+=("variable ${name}"); fi
+          done
+          if [[ -z "${AWS_ROLE_ARN:-}" ]]; then missing+=("secret AWS_ROLE_ARN"); fi
+          if ((${#missing[@]} > 0)); then
+            echo "::error title=Missing configuration in the prod environment::${missing[*]}"
+            echo "The GitHub Environment 'prod' does not define:"
+            printf '  - %s\n' "${missing[@]}"
+            echo "Add them under Settings > Environments > prod (names and meaning: header of .github/workflows/deploy.yml)."
+            exit 1
+          fi
+          echo "All required variables and secrets are defined."
+
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python for the SAM CLI
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install the pinned SAM CLI
+        run: python -m pip install "$(grep '^aws-sam-cli==' .github/ci/requirements.txt)"
+      - name: Set up the Lambda runtime Python for sam build
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: AWS login (group 1)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION_GLOBAL }}
+          role-duration-seconds: 3600
+      - name: Group 1 - bootstrap (data regions), edge, cognito, network, database primary
+        run: bash scripts/deploy.sh --steps bootstrap,edge,cognito,network,db-primary
+
+      - name: AWS login (group 2)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION_GLOBAL }}
+          role-duration-seconds: 3600
+      - name: Group 2 - database secondary
+        run: bash scripts/deploy.sh --steps db-secondary
+
+      - name: AWS login (group 3)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION_GLOBAL }}
+          role-duration-seconds: 3600
+      - name: Group 3 - schema bootstrap, api (both regions), dns, dashboard
+        run: bash scripts/deploy.sh --steps schema,api,dns,dashboard

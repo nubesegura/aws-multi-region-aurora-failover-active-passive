@@ -1,0 +1,426 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  AWS DR demo - edge (deploy in the primary region, us-east-2). Two static sites, the monitor dashboard and
+  the banking app, each with a private S3 bucket served through its own CloudFront distribution with
+  a shared Origin Access Control and security headers policy (HSTS, CSP without inline code) and
+  HTTPS-only viewers.
+
+# Naming: <acronym>-<region>-drdemo-<descriptor>-<env>; the region segment is the region without dashes.
+# Accepted deviations (security design review, section 4):
+#   D08 default *.cloudfront.net certificate, D09 no CloudFront or S3 access logs,
+#   D10 no geo restriction, D11 SSE-S3 on the public-assets bucket, D21 no Macie statement or AWS Backup.
+#   G7 no AWS WAF on the distributions (owner decision 2026-11-10).
+
+Parameters:
+  ApiDomainName:
+    Type: String
+    Description: Custom domain of the API (host name only). Used in the CSP connect-src directive.
+    AllowedPattern: "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+    ConstraintDescription: Lowercase fully qualified host name without scheme or path, for example api.example.com.
+  EnvType:
+    Type: String
+    Description: Environment tier (env-type tag and last segment of every name).
+    AllowedValues: [dev, prod]
+    Default: prod
+  ReplicaRegion:
+    Type: String
+    Description: Standby region of the Cognito replica (used in the CSP connect-src directive).
+    AllowedPattern: "^[a-z]{2}-[a-z]+-[0-9]$"
+    ConstraintDescription: A region name, for example us-west-2.
+    Default: us-west-2
+
+Resources:
+  # ---------------------------------------------------------------------------------------------
+  # Dashboard bucket: public static assets only, never reachable except through CloudFront (OAC).
+  # ---------------------------------------------------------------------------------------------
+  DashboardBucket:
+    Type: AWS::S3::Bucket
+    # Checkov skips (inline justification, project decisions recorded in the design review):
+    #   CKV_AWS_18  S3 access logging: D09, bucket holds only public static files reproducible from Git.
+    #   CKV_AWS_145 SSE-KMS: D11 / s3.md "Documented exception: SSE-S3 for static website buckets"
+    #               (public assets only; KMS behind OAC would add key policy and per-request cost).
+    #   CKV2_AWS_62 Event notifications: no consumer of bucket events exists in this design.
+    #   CKV_AWS_144 Cross-region replication: content is reproducible from Git; the edge is single-region (us-east-2).
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: "D09 - no access logs; bucket only holds public static files reproducible from Git"
+          - id: CKV_AWS_145
+            comment: "D11 - SSE-S3 documented exception for static website buckets (s3.md)"
+          - id: CKV2_AWS_62
+            comment: "No consumer of bucket events in this design"
+          - id: CKV_AWS_144
+            comment: "No cross-region replication; content is reproducible from Git"
+    Properties:
+      BucketName: !Join
+        - "-"
+        - - bckt
+          - !Join ["", !Split ["-", !Ref "AWS::Region"]]
+          - drdemo
+          - dashboard
+          - !Ref "AWS::AccountId"
+          - !Ref EnvType
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      # SSE-S3 exception (D11): public assets only, no uploads by users. See s3.md.
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - { Key: team-owner, Value: nube-segura }
+        - { Key: project-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: app-name, Value: dr-demo }
+        - { Key: repo-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: env-type, Value: !Ref EnvType }
+        - { Key: sec-confidenciality, Value: public }
+        - { Key: sec-integrity, Value: tolerable-impact }
+        - { Key: sec-avaliability, Value: tolerable-impact }
+        - { Key: sec-domain, Value: na }
+        - { Key: sec-pii, Value: na }
+        - { Key: sec-compliance, Value: na }
+
+  DashboardBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DashboardBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${DashboardBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt DashboardBucket.Arn
+              - !Sub "${DashboardBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  # ---------------------------------------------------------------------------------------------
+  # CloudFront
+  # ---------------------------------------------------------------------------------------------
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Join
+          - "-"
+          - - oac
+            - !Join ["", !Split ["-", !Ref "AWS::Region"]]
+            - drdemo
+            - dashboard
+            - !Ref EnvType
+        Description: OAC for the dashboard bucket (SigV4, always sign)
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Join
+          - "-"
+          - - rhp
+            - !Join ["", !Split ["-", !Ref "AWS::Region"]]
+            - drdemo
+            - dashboard
+            - !Ref EnvType
+        Comment: Security headers for the static dashboard (no inline script or style allowed)
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 63072000
+            IncludeSubdomains: true
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: no-referrer
+            Override: true
+          ContentSecurityPolicy:
+            Override: true
+            ContentSecurityPolicy: !Sub >-
+              default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;
+              connect-src 'self' https://${ApiDomainName} https://cognito-idp.${AWS::Region}.amazonaws.com https://cognito-idp.${ReplicaRegion}.amazonaws.com; base-uri 'none'; form-action 'none';
+              frame-ancestors 'none'
+        CustomHeadersConfig:
+          Items:
+            # Default only: the publish step sets Cache-Control as object metadata, which wins (Override false).
+            - Header: Cache-Control
+              Value: no-cache
+              Override: false
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    # No WAF WebACL is attached (G7, owner decision 2026-11-10).
+    # Checkov skips (accepted deviations in the design review):
+    #   CKV_AWS_86  Access logging: D09.
+    #   CKV_AWS_174 TLS floor: D08, the default *.cloudfront.net certificate fixes the floor at TLSv1;
+    #               a custom domain plus ACM certificate would allow TLSv1.2_2021 (see Fix in D08).
+    #   CKV_AWS_310 Origin failover: single static origin, reproducible from Git, edge is out of the DR scope.
+    #   CKV2_AWS_32 Response headers policy: IS attached (checkov resolves it only for managed policy ids).
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_86
+            comment: "D09 - no CloudFront access logging (cost and noise, public static content)"
+          - id: CKV_AWS_174
+            comment: "D08 - default CloudFront certificate has a fixed TLSv1 floor; fix is a custom domain"
+          - id: CKV_AWS_310
+            comment: "Single static origin reproducible from Git; no origin group needed for the demo"
+          - id: CKV_AWS_68
+            comment: "G7 - no WAF for now (owner decision 2026-11-10); mitigated by Cognito authorizer on the API, OAC and strict CSP"
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "drdemo dashboard (${EnvType})"
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        DefaultRootObject: index.html
+        Origins:
+          - Id: dashboard-bucket
+            DomainName: !GetAtt DashboardBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: dashboard-bucket
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Managed policy CachingOptimized. The publish step invalidates after each upload.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+        CustomErrorResponses:
+          - { ErrorCode: 403, ResponseCode: 403, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 404, ResponseCode: 404, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 500, ResponseCode: 500, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 502, ResponseCode: 502, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 503, ResponseCode: 503, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 504, ResponseCode: 504, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+        # D08: default certificate. With it CloudFront fixes the viewer TLS floor at TLSv1 and
+        # MinimumProtocolVersion cannot be raised; switch to an ACM certificate (TLSv1.2_2021) with a custom domain.
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+        # D10: no geographic restriction (presenter location unknown).
+        Restrictions:
+          GeoRestriction:
+            RestrictionType: none
+      Tags:
+        - { Key: Name, Value: !Join ["-", [cfd, !Join ["", !Split ["-", !Ref "AWS::Region"]], drdemo, dashboard, !Ref EnvType]] }
+        - { Key: team-owner, Value: nube-segura }
+        - { Key: project-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: app-name, Value: dr-demo }
+        - { Key: repo-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: env-type, Value: !Ref EnvType }
+
+  # ---------------------------------------------------------------------------------------------
+  # Banking app site: second bucket and distribution (same controls as the dashboard site).
+  # The bucket is readable only by BankDistribution (never by the dashboard distribution).
+  # ---------------------------------------------------------------------------------------------
+  BankBucket:
+    Type: AWS::S3::Bucket
+    # Checkov skips (same justification as DashboardBucket):
+    #   CKV_AWS_18  S3 access logging: D09, bucket holds only public static files reproducible from Git.
+    #   CKV_AWS_145 SSE-KMS: D11 / s3.md "Documented exception: SSE-S3 for static website buckets".
+    #   CKV2_AWS_62 Event notifications: no consumer of bucket events exists in this design.
+    #   CKV_AWS_144 Cross-region replication: content is reproducible from Git; the edge is single-region (us-east-2).
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: "D09 - no access logs; bucket only holds public static files reproducible from Git"
+          - id: CKV_AWS_145
+            comment: "D11 - SSE-S3 documented exception for static website buckets (s3.md)"
+          - id: CKV2_AWS_62
+            comment: "No consumer of bucket events in this design"
+          - id: CKV_AWS_144
+            comment: "No cross-region replication; content is reproducible from Git"
+    Properties:
+      BucketName: !Join
+        - "-"
+        - - bckt
+          - !Join ["", !Split ["-", !Ref "AWS::Region"]]
+          - drdemo
+          - bank
+          - !Ref "AWS::AccountId"
+          - !Ref EnvType
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      # SSE-S3 exception (D11): public assets only, no uploads by users. See s3.md.
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - { Key: team-owner, Value: nube-segura }
+        - { Key: project-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: app-name, Value: dr-demo }
+        - { Key: repo-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: env-type, Value: !Ref EnvType }
+        - { Key: sec-confidenciality, Value: public }
+        - { Key: sec-integrity, Value: tolerable-impact }
+        - { Key: sec-avaliability, Value: tolerable-impact }
+        - { Key: sec-domain, Value: na }
+        - { Key: sec-pii, Value: na }
+        - { Key: sec-compliance, Value: na }
+
+  BankBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BankBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${BankBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${BankDistribution}"
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt BankBucket.Arn
+              - !Sub "${BankBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  BankDistribution:
+    Type: AWS::CloudFront::Distribution
+    # No WAF WebACL is attached (G7, owner decision 2026-11-10).
+    # Checkov skips (same accepted deviations as Distribution):
+    #   CKV_AWS_86  Access logging: D09.
+    #   CKV_AWS_174 TLS floor: D08, the default *.cloudfront.net certificate fixes the floor at TLSv1.
+    #   CKV_AWS_310 Origin failover: single static origin, reproducible from Git, edge is out of the DR scope.
+    #   CKV2_AWS_32 Response headers policy: IS attached (checkov resolves it only for managed policy ids).
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_86
+            comment: "D09 - no CloudFront access logging (cost and noise, public static content)"
+          - id: CKV_AWS_174
+            comment: "D08 - default CloudFront certificate has a fixed TLSv1 floor; fix is a custom domain"
+          - id: CKV_AWS_310
+            comment: "Single static origin reproducible from Git; no origin group needed for the demo"
+          - id: CKV_AWS_68
+            comment: "G7 - no WAF for now (owner decision 2026-11-10); mitigated by Cognito authorizer on the API, OAC and strict CSP"
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "drdemo bank (${EnvType})"
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        DefaultRootObject: index.html
+        Origins:
+          - Id: bank-bucket
+            DomainName: !GetAtt BankBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: bank-bucket
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Managed policy CachingOptimized. The publish step invalidates after each upload.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+        CustomErrorResponses:
+          - { ErrorCode: 403, ResponseCode: 403, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 404, ResponseCode: 404, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 500, ResponseCode: 500, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 502, ResponseCode: 502, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 503, ResponseCode: 503, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 504, ResponseCode: 504, ResponsePagePath: /error.html, ErrorCachingMinTTL: 10 }
+        # D08: default certificate (viewer TLS floor fixed at TLSv1 by CloudFront).
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+        # D10: no geographic restriction (presenter location unknown).
+        Restrictions:
+          GeoRestriction:
+            RestrictionType: none
+      Tags:
+        - { Key: Name, Value: !Join ["-", [cfd, !Join ["", !Split ["-", !Ref "AWS::Region"]], drdemo, bank, !Ref EnvType]] }
+        - { Key: team-owner, Value: nube-segura }
+        - { Key: project-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: app-name, Value: dr-demo }
+        - { Key: repo-name, Value: aws-multi-region-aurora-failover-active-passive }
+        - { Key: env-type, Value: !Ref EnvType }
+
+Outputs:
+  BankBucketName:
+    Description: Name of the private banking app bucket (publish target).
+    Value: !Ref BankBucket
+  BankDistributionId:
+    Description: CloudFront distribution id of the banking app (used for invalidations).
+    Value: !Ref BankDistribution
+  BankDistributionDomainName:
+    Description: CloudFront domain name of the banking app (site host, also a CORS origin of the API).
+    Value: !GetAtt BankDistribution.DomainName
+  DashboardBucketName:
+    Description: Name of the private dashboard bucket (publish target).
+    Value: !Ref DashboardBucket
+  DistributionId:
+    Description: CloudFront distribution id (used for invalidations).
+    Value: !Ref Distribution
+  DistributionDomainName:
+    Description: CloudFront domain name (dashboard URL host, also the CORS origin of the API).
+    Value: !GetAtt Distribution.DomainName

@@ -1,0 +1,232 @@
+# Simulate-outage workflow of the DR demo (requirements 8.1 to 8.5, 9.1). Manual only. It runs
+# scripts/dr/10-simulate-outage.sh against the prod stack: "fence" sets reserved concurrency 0 on the six API functions of
+# one region (every request to that region is throttled; the database is NOT touched), "unfence" removes the reservation,
+# "status" only reports it. Nothing is created or deleted; the job refuses to run unless it was dispatched from main.
+#
+# UNDO: run this workflow again with action = unfence and the same region (the script refuses to lift the fence of a
+# cluster that is not a member of the global cluster; that case is a manual runbook step, never forced here).
+#
+# Inputs: action  = status (default) | fence | unfence
+#         region  = one of the two data regions (must equal AWS_REGION_PRIMARY or AWS_REGION_SECONDARY)
+#         confirm = for action fence it must be exactly the region name (requirement 8.4); ignored otherwise
+#
+# REQUIRED CONFIGURATION in the GitHub Environment "prod" (same names as deploy.yml; the first step fails with a clear
+# message when something is missing):
+#   Variables: AWS_REGION_PRIMARY AWS_REGION_SECONDARY AWS_REGION_GLOBAL API_DOMAIN_NAME HOSTED_ZONE_ID
+#   Secrets:   AWS_ROLE_ARN (this workflow never reads or uses a Cognito token)
+#
+# WARNING: the concurrency group drdemo-prod-infrastructure is shared with deploy, destroy and failover. GitHub keeps only
+# one pending run per group: a deploy queued behind a running job can silently replace a queued run of this workflow (and
+# the other way round). After dispatching, check the run list (Actions tab) and confirm that the run started.
+#
+# The summary of the run (action, region, actor, time, seconds per step, writer region before and after) is written to the
+# job summary. It never contains a token or the account id.
+name: simulate-outage
+
+# checkov:skip=CKV_GHA_7: the inputs are typed controls of a fault drill (validated in the first step); they do not influence any build output
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "status reports the fence, fence simulates the loss of the region, unfence lifts it"
+        required: true
+        type: choice
+        default: status
+        options:
+          - status
+          - fence
+          - unfence
+      region:
+        description: "Data region to act on (must equal AWS_REGION_PRIMARY or AWS_REGION_SECONDARY of the prod environment)"
+        required: true
+        type: string
+      confirm:
+        description: "For action fence: type the region name again, exactly. Leave empty otherwise"
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: drdemo-prod-infrastructure
+  cancel-in-progress: false
+
+jobs:
+  simulate-outage:
+    name: simulate-outage prod
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION_PRIMARY: ${{ vars.AWS_REGION_PRIMARY }}
+      AWS_REGION_SECONDARY: ${{ vars.AWS_REGION_SECONDARY }}
+      AWS_REGION_GLOBAL: ${{ vars.AWS_REGION_GLOBAL }}
+      API_DOMAIN_NAME: ${{ vars.API_DOMAIN_NAME }}
+      HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+      INPUT_ACTION: ${{ inputs.action }}
+      INPUT_REGION: ${{ inputs.region }}
+      INPUT_CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - name: Validate the branch, the inputs, the variables and the secrets
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error title=Wrong branch::this workflow runs only from refs/heads/main (got ${GITHUB_REF//[^A-Za-z0-9_\/.-]/?})"
+            exit 1
+          fi
+          missing=()
+          for name in AWS_REGION_PRIMARY AWS_REGION_SECONDARY AWS_REGION_GLOBAL API_DOMAIN_NAME HOSTED_ZONE_ID; do
+            if [[ -z "${!name:-}" ]]; then missing+=("variable ${name}"); fi
+          done
+          if [[ -z "${AWS_ROLE_ARN:-}" ]]; then missing+=("secret AWS_ROLE_ARN"); fi
+          if ((${#missing[@]} > 0)); then
+            echo "::error title=Missing configuration in the prod environment::${missing[*]}"
+            echo "The GitHub Environment 'prod' does not define:"
+            printf '  - %s\n' "${missing[@]}"
+            echo "Add them under Settings > Environments > prod (names and meaning: header of .github/workflows/deploy.yml)."
+            exit 1
+          fi
+          case "${INPUT_ACTION}" in
+            status | fence | unfence) ;;
+            *)
+              echo "::error title=Invalid input::action must be status, fence or unfence"
+              exit 1
+              ;;
+          esac
+          if [[ "${INPUT_REGION}" != "${AWS_REGION_PRIMARY}" && "${INPUT_REGION}" != "${AWS_REGION_SECONDARY}" ]]; then
+            echo "::error title=Invalid input::region must equal AWS_REGION_PRIMARY (${AWS_REGION_PRIMARY}) or AWS_REGION_SECONDARY (${AWS_REGION_SECONDARY})"
+            exit 1
+          fi
+          if [[ "${INPUT_ACTION}" == "fence" && "${INPUT_CONFIRM}" != "${INPUT_REGION}" ]]; then
+            echo "::error title=Confirmation missing::to fence a region the input 'confirm' must be exactly the region name: ${INPUT_REGION}"
+            exit 1
+          fi
+          date -u +%Y-%m-%dT%H:%M:%SZ >"${RUNNER_TEMP}/started-at"
+          echo "Branch, inputs and configuration are in place."
+
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare the step timer and the helper functions
+        run: |
+          set -euo pipefail
+          cat >"${RUNNER_TEMP}/dr-helpers.sh" <<'EOF'
+          STEP_TIMINGS="${RUNNER_TEMP}/step-timings.tsv"
+
+          # timed LABEL COMMAND... ; runs the command, appends "label<TAB>seconds<TAB>exit code" and returns its exit code.
+          timed() {
+            local label="$1" started rc=0
+            shift
+            started="$(date +%s)"
+            "$@" || rc=$?
+            printf '%s\t%s\t%s\n' "${label}" "$(($(date +%s) - started))" "${rc}" >>"${STEP_TIMINGS}"
+            return "${rc}"
+          }
+
+          # verify_account ; the account id is read, masked and never printed.
+          verify_account() {
+            local id
+            id="$(aws sts get-caller-identity --query Account --output text 2>/dev/null)" || id=""
+            if [[ ! "${id}" =~ ^[0-9]{12}$ ]]; then
+              echo "::error title=AWS identity::sts get-caller-identity did not return an account; the OIDC login is not usable"
+              return 1
+            fi
+            echo "::add-mask::${id}"
+            echo "AWS identity verified (account id masked)."
+          }
+
+          # writer_region ; prints the region of the writer member of the demo global cluster, or unknown.
+          writer_region() {
+            local cluster_a cluster_b region json out
+            cluster_a="rdsc-${AWS_REGION_PRIMARY//-/}-drdemo-prod"
+            cluster_b="rdsc-${AWS_REGION_SECONDARY//-/}-drdemo-prod"
+            for region in "${AWS_REGION_PRIMARY}" "${AWS_REGION_SECONDARY}"; do
+              json="$(aws --cli-connect-timeout 10 --cli-read-timeout 30 rds describe-global-clusters --region "${region}" --output json 2>/dev/null)" || continue
+              out="$(jq -r --arg a ":cluster:${cluster_a}" --arg b ":cluster:${cluster_b}" \
+                '[.GlobalClusters[] | select(any(.GlobalClusterMembers[]?; (.DBClusterArn | endswith($a)) or (.DBClusterArn | endswith($b))))]
+                 | .[0] | [.GlobalClusterMembers[]? | select(.IsWriter == true) | (.DBClusterArn | split(":")[3])] | .[0] // empty' \
+                <<<"${json}" 2>/dev/null)" || out=""
+              if [[ "${out}" =~ ^[a-z0-9-]+$ ]]; then
+                printf '%s' "${out}"
+                return 0
+              fi
+            done
+            printf 'unknown'
+          }
+          EOF
+          : >"${RUNNER_TEMP}/step-timings.tsv"
+          echo "Helpers written."
+
+      - name: AWS login
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION_GLOBAL }}
+          role-duration-seconds: 3600
+      - name: Verify the AWS account
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "${RUNNER_TEMP}/dr-helpers.sh"
+          timed "Verify the AWS account" verify_account
+
+      - name: Record the writer region before
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "${RUNNER_TEMP}/dr-helpers.sh"
+          timed "Writer region before" writer_region >"${RUNNER_TEMP}/writer-before"
+          echo "Writer region before: $(cat "${RUNNER_TEMP}/writer-before")"
+
+      - name: Run 10-simulate-outage.sh
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "${RUNNER_TEMP}/dr-helpers.sh"
+          args=()
+          case "${INPUT_ACTION}" in
+            status) args=(--status) ;;
+            unfence) args=(--undo) ;;
+            fence) ;;
+          esac
+          timed "10-simulate-outage.sh ${INPUT_ACTION}" bash scripts/dr/10-simulate-outage.sh --region "${INPUT_REGION}" "${args[@]}"
+
+      - name: Summary
+        if: always()
+        run: |
+          set -uo pipefail
+          # shellcheck source=/dev/null
+          [[ -f "${RUNNER_TEMP}/dr-helpers.sh" ]] && source "${RUNNER_TEMP}/dr-helpers.sh"
+          safe() { if [[ "${1:-}" =~ ^[a-z0-9-]{1,40}$ ]]; then printf '%s' "$1"; else printf '(not valid)'; fi; }
+          before="$(cat "${RUNNER_TEMP}/writer-before" 2>/dev/null || true)"
+          after="unknown"
+          if declare -F writer_region >/dev/null; then after="$(writer_region)"; fi
+          {
+            echo "## simulate-outage"
+            echo
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Action | $(safe "${INPUT_ACTION}") |"
+            echo "| Region | $(safe "${INPUT_REGION}") |"
+            echo "| Actor | ${GITHUB_ACTOR} |"
+            echo "| Started (UTC) | $(cat "${RUNNER_TEMP}/started-at" 2>/dev/null || echo not-started) |"
+            echo "| Finished (UTC) | $(date -u +%Y-%m-%dT%H:%M:%SZ) |"
+            echo "| Writer region before | $(safe "${before:-unknown}") |"
+            echo "| Writer region after | $(safe "${after}") |"
+            echo "| Consistency check | not part of this workflow |"
+            echo
+            echo "| Step | Seconds | Exit code |"
+            echo "| --- | --- | --- |"
+            if [[ -f "${RUNNER_TEMP}/step-timings.tsv" ]]; then
+              while IFS=$'\t' read -r label secs rc; do
+                echo "| ${label} | ${secs} | ${rc} |"
+              done <"${RUNNER_TEMP}/step-timings.tsv"
+            fi
+          } >>"${GITHUB_STEP_SUMMARY}"

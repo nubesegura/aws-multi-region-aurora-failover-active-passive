@@ -1,0 +1,3826 @@
+{
+  "events": [
+    {
+      "data": {
+        "name": "baseline",
+        "state": "start"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:00:00.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:00.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0001",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:00.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:00.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:00.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "u0000",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "auth",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:00:00.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:00.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "skipped",
+        "end": null,
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": null,
+        "step": "Group 2 - planned switchover back to the primary region",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:00.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "skipped",
+        "end": null,
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": null,
+        "step": "Group 2 - deactivate the Cognito replica in the secondary region",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:00.000Z"
+    },
+    {
+      "data": {
+        "answer": [
+          "192.0.2.10"
+        ],
+        "first": true,
+        "observed": "2026-11-11T12:00:00.000Z",
+        "previous": null
+      },
+      "kind": "dns",
+      "time": "2026-11-11T12:00:00.000Z"
+    },
+    {
+      "data": {
+        "metric": "AuroraGlobalDBReplicationLag",
+        "milliseconds": 850.0,
+        "region": "us-west-2"
+      },
+      "kind": "metric_sample",
+      "time": "2026-11-11T12:00:00.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:02.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0002",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:02.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:02.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:04.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0003",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:04.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:04.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:05.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0005",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:05.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:05.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:06.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0004",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:06.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:06.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:07.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0005",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:07.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:07.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:08.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0005",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:08.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:08.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:10.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0006",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:10.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:10.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:12.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0007",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:12.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:12.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:14.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0008",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:14.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:14.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:15.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0015",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:15.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:15.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:16.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0009",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:16.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:16.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:17.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0015",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:17.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:17.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:18.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0010",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:18.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:18.000Z"
+    },
+    {
+      "data": {
+        "name": "baseline",
+        "state": "end"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:00:20.000Z"
+    },
+    {
+      "data": {
+        "name": "fence",
+        "state": "start"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:00:20.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:20.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0011",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:20.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:20.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:20.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "u0020",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "auth",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:00:20.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:20.000Z"
+    },
+    {
+      "data": {
+        "event": "dispatch",
+        "inputs": {},
+        "phase": "fence",
+        "workflow": "simulate-outage"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:20.500Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "created": "2026-11-11T12:00:21.000Z",
+        "event": "run",
+        "phase": "fence",
+        "run_id": 1,
+        "started": "2026-11-11T12:00:24.000Z",
+        "status": "completed",
+        "updated": "2026-11-11T12:00:40.000Z",
+        "workflow": "simulate-outage"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:21.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:22.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0012",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:22.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:22.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:24.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0013",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:24.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:24.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:25.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "fence",
+        "start": "2026-11-11T12:00:24.000Z",
+        "step": "Validate the branch, the inputs, the variables and the secrets",
+        "workflow": "simulate-outage"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:24.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:25.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0025",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:25.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:25.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:26.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "fence",
+        "start": "2026-11-11T12:00:25.000Z",
+        "step": "Check out the code",
+        "workflow": "simulate-outage"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:25.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:26.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0014",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:26.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:26.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:28.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "fence",
+        "start": "2026-11-11T12:00:26.000Z",
+        "step": "AWS login",
+        "workflow": "simulate-outage"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:26.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:27.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0025",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:27.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:27.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:28.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0015",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:28.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:28.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:30.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0016",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:30.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:30.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:38.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "fence",
+        "start": "2026-11-11T12:00:30.000Z",
+        "step": "Run 10-simulate-outage.sh",
+        "workflow": "simulate-outage"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:30.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:00:32.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0017",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:00:32.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:32.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:34.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 55.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:34.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:34.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:35.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0035",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:35.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:35.000Z"
+    },
+    {
+      "data": {
+        "attempt": 2,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:36.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:36.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:36.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:37.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0035",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:37.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:37.000Z"
+    },
+    {
+      "data": {
+        "attempt": 3,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:38.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 50.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:38.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:38.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:39.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "fence",
+        "start": "2026-11-11T12:00:38.000Z",
+        "step": "Summary",
+        "workflow": "simulate-outage"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:38.000Z"
+    },
+    {
+      "data": {
+        "attempt": 4,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:40.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 35.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:40.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:40.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:40.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "u0040",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "auth",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:00:40.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:40.000Z"
+    },
+    {
+      "data": {
+        "name": "fence",
+        "state": "end"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:00:42.000Z"
+    },
+    {
+      "data": {
+        "name": "to-secondary",
+        "state": "start"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:00:42.000Z"
+    },
+    {
+      "data": {
+        "attempt": 5,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:42.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 45.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:42.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:42.000Z"
+    },
+    {
+      "data": {
+        "event": "dispatch",
+        "inputs": {},
+        "phase": "to-secondary",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:43.000Z"
+    },
+    {
+      "data": {
+        "attempt": 6,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:44.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 55.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:44.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:44.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "created": "2026-11-11T12:00:44.000Z",
+        "event": "run",
+        "phase": "to-secondary",
+        "run_id": 1,
+        "started": "2026-11-11T12:00:47.000Z",
+        "status": "completed",
+        "updated": "2026-11-11T12:01:41.000Z",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:44.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:45.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0045",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:45.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:45.000Z"
+    },
+    {
+      "data": {
+        "attempt": 7,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:46.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:46.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:46.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:47.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0045",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:47.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:47.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:48.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:00:47.000Z",
+        "step": "Validate the branch, the inputs, the variables and the secrets",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:47.000Z"
+    },
+    {
+      "data": {
+        "attempt": 8,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:48.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 50.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:48.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:48.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:49.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:00:48.000Z",
+        "step": "Check out the code",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:48.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:50.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:00:49.000Z",
+        "step": "Prepare the step timer and the helper functions",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:49.000Z"
+    },
+    {
+      "data": {
+        "attempt": 9,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:50.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 35.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:50.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:50.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:52.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:00:50.000Z",
+        "step": "AWS login (group 1)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:50.000Z"
+    },
+    {
+      "data": {
+        "attempt": 10,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:52.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 45.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:52.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:52.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:53.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:00:52.000Z",
+        "step": "Verify the AWS account (group 1)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:52.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:54.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:00:53.000Z",
+        "step": "Record the writer region before",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:53.000Z"
+    },
+    {
+      "data": {
+        "attempt": 11,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:54.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 55.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:54.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:54.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:00:58.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:00:54.000Z",
+        "step": "Group 1 - pre-checks (read only)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:54.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:55.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0055",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:55.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:55.000Z"
+    },
+    {
+      "data": {
+        "attempt": 12,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:56.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:56.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:56.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:57.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0055",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:57.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:57.000Z"
+    },
+    {
+      "data": {
+        "attempt": 13,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:00:58.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 50.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:00:58.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:00:58.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:00.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:00:58.000Z",
+        "step": "Group 1 - confirm that the primary region is fenced",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:00:58.000Z"
+    },
+    {
+      "data": {
+        "attempt": 14,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:00.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 35.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:00.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:00.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:00.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "u0060",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "auth",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:00.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:00.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:02.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:00.000Z",
+        "step": "Group 1 - confirm that the secondary region is NOT fenced",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:00.000Z"
+    },
+    {
+      "data": {
+        "metric": "AuroraGlobalDBReplicationLag",
+        "milliseconds": 1100.0,
+        "region": "us-west-2"
+      },
+      "kind": "metric_sample",
+      "time": "2026-11-11T12:01:00.000Z"
+    },
+    {
+      "data": {
+        "attempt": 15,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:02.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 45.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:02.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:02.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:05.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:02.000Z",
+        "step": "Group 1 - unfence the primary region",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:02.000Z"
+    },
+    {
+      "data": {
+        "attempt": 16,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:04.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 55.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:04.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:04.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:05.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0065",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:05.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:05.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:07.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:05.000Z",
+        "step": "AWS login (group 2)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:05.000Z"
+    },
+    {
+      "data": {
+        "attempt": 17,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:06.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:06.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:06.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:07.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0065",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:07.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:07.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:08.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:07.000Z",
+        "step": "Verify the AWS account (group 2)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:07.000Z"
+    },
+    {
+      "data": {
+        "attempt": 18,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:08.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 50.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:08.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:08.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:13.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:08.000Z",
+        "step": "Group 2 - activate the Cognito replica in the secondary region",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:08.000Z"
+    },
+    {
+      "data": {
+        "attempt": 19,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:10.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 35.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:10.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:10.000Z"
+    },
+    {
+      "data": {
+        "attempt": 20,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:12.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 45.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:12.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:12.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:25.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:13.000Z",
+        "step": "Group 2 - planned switchover to the secondary region",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:13.000Z"
+    },
+    {
+      "data": {
+        "attempt": 21,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:14.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 55.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:14.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:14.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:15.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0075",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:15.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:15.000Z"
+    },
+    {
+      "data": {
+        "attempt": 22,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:16.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:16.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:16.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:17.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0075",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:17.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:17.000Z"
+    },
+    {
+      "data": {
+        "attempt": 23,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:18.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 50.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:18.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:18.000Z"
+    },
+    {
+      "data": {
+        "attempt": 24,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:20.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 35.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:20.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:20.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:20.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "u0080",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "auth",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:20.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:20.000Z"
+    },
+    {
+      "data": {
+        "attempt": 25,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:22.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 45.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:22.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:22.000Z"
+    },
+    {
+      "data": {
+        "attempt": 26,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:24.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 55.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:24.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:24.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:25.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0085",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:25.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:25.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:27.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:25.000Z",
+        "step": "AWS login (group 3)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:25.000Z"
+    },
+    {
+      "data": {
+        "attempt": 27,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:26.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:26.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:26.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:27.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0085",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:27.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:27.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:28.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:27.000Z",
+        "step": "Verify the AWS account (group 3)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:27.000Z"
+    },
+    {
+      "data": {
+        "attempt": 28,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:28.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 50.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:28.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:28.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:31.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:28.000Z",
+        "step": "Group 3 - switch the Route 53 weights",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:28.000Z"
+    },
+    {
+      "data": {
+        "attempt": 29,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:30.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 35.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:01:30.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:30.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:37.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:31.000Z",
+        "step": "Group 3 - validate the service on the custom domain",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:31.000Z"
+    },
+    {
+      "data": {
+        "attempt": 30,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:32.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0018",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:32.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:32.000Z"
+    },
+    {
+      "data": {
+        "answer": [
+          "198.51.100.7"
+        ],
+        "first": false,
+        "observed": "2026-11-11T12:01:32.000Z",
+        "previous": null
+      },
+      "kind": "dns",
+      "time": "2026-11-11T12:01:32.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:34.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0019",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:34.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:34.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:35.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0095",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:35.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:35.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:36.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0020",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:36.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:36.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:37.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0095",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:37.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:37.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:40.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:37.000Z",
+        "step": "Group 3 - consistency check of the ledger",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:37.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:38.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0021",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:38.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:38.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:40.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0022",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:40.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:40.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:40.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "u0100",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "auth",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:40.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:40.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:01:41.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-secondary",
+        "start": "2026-11-11T12:01:40.000Z",
+        "step": "Summary",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:40.000Z"
+    },
+    {
+      "data": {
+        "event": "probe_deposit",
+        "outcome": "deposited",
+        "phase": "to-secondary",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:01:40.200Z"
+    },
+    {
+      "data": {
+        "name": "to-secondary",
+        "state": "end"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:01:42.000Z"
+    },
+    {
+      "data": {
+        "name": "steady-secondary",
+        "state": "start"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:01:42.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:42.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0023",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:42.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:42.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:44.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0024",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:44.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:44.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:45.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0105",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:45.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:45.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:46.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0025",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:46.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:46.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:47.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0105",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:47.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:47.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:48.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0026",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:48.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:48.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:50.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0027",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:50.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:50.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:52.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0028",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:52.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:52.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:54.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0029",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:54.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:54.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:55.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0115",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:55.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:55.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:56.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0030",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:56.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:56.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:01:57.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0115",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:57.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:57.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:01:58.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0031",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:01:58.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:01:58.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:00.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0032",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:00.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:00.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:00.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "u0120",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "auth",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:00.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:00.000Z"
+    },
+    {
+      "data": {
+        "metric": "AuroraGlobalDBReplicationLag",
+        "milliseconds": 920.0,
+        "region": "us-west-2"
+      },
+      "kind": "metric_sample",
+      "time": "2026-11-11T12:02:00.000Z"
+    },
+    {
+      "data": {
+        "name": "steady-secondary",
+        "state": "end"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:02:02.000Z"
+    },
+    {
+      "data": {
+        "name": "to-primary",
+        "state": "start"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:02:02.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:02.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0033",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:02.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:02.000Z"
+    },
+    {
+      "data": {
+        "event": "dispatch",
+        "inputs": {},
+        "phase": "to-primary",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:03.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:04.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0034",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:04.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:04.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "created": "2026-11-11T12:02:04.000Z",
+        "event": "run",
+        "phase": "to-primary",
+        "run_id": 1,
+        "started": "2026-11-11T12:02:07.000Z",
+        "status": "completed",
+        "updated": "2026-11-11T12:02:40.000Z",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:04.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:05.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0125",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:05.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:05.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:06.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0035",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:06.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:06.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:07.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0125",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:07.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:07.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:08.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:07.000Z",
+        "step": "Validate the branch, the inputs, the variables and the secrets",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:07.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:08.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0036",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:08.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:08.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:09.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:08.000Z",
+        "step": "Check out the code",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:08.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:10.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:09.000Z",
+        "step": "Prepare the step timer and the helper functions",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:09.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:10.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0037",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:10.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:10.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:12.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:10.000Z",
+        "step": "AWS login (group 1)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:10.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:12.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0038",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:12.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:12.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:13.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:12.000Z",
+        "step": "Verify the AWS account (group 1)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:12.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:14.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:13.000Z",
+        "step": "Record the writer region before",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:13.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:14.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0039",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:14.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:14.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:18.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:14.000Z",
+        "step": "Group 1 - pre-checks (read only)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:14.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:15.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0135",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:15.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:15.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:16.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0040",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:16.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:16.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:17.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0135",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:17.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:17.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:18.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0041",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:18.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:18.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:20.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:18.000Z",
+        "step": "AWS login (group 2)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:18.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:20.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0042",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:20.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:20.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:20.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "u0140",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "auth",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:20.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:20.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:21.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:20.000Z",
+        "step": "Verify the AWS account (group 2)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:20.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:28.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:21.000Z",
+        "step": "Group 2 - planned switchover back to the primary region",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:21.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:22.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0043",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:22.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:22.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:24.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0044",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:24.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:24.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:25.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0145",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:25.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:25.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:26.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0045",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:02:26.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:26.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:27.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0145",
+        "latency_ms": 40.0,
+        "ok": false,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:02:27.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:27.000Z"
+    },
+    {
+      "data": {
+        "attempt": 2,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:28.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0045",
+        "latency_ms": 50.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:02:28.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:28.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:30.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:28.000Z",
+        "step": "Group 2 - deactivate the Cognito replica in the secondary region",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:28.000Z"
+    },
+    {
+      "data": {
+        "attempt": 3,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:30.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0045",
+        "latency_ms": 35.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:02:30.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:30.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:31.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:30.000Z",
+        "step": "AWS login (group 3)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:30.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:32.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:31.000Z",
+        "step": "Verify the AWS account (group 3)",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:31.000Z"
+    },
+    {
+      "data": {
+        "attempt": 4,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:32.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0045",
+        "latency_ms": 45.0,
+        "ok": false,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": null,
+        "start": "2026-11-11T12:02:32.000Z",
+        "status": 503
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:32.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:34.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:32.000Z",
+        "step": "Group 3 - switch the Route 53 weights",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:32.000Z"
+    },
+    {
+      "data": {
+        "attempt": 5,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:34.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0045",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:34.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:34.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:38.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:34.000Z",
+        "step": "Group 3 - validate the service on the custom domain",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:34.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:35.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0155",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:35.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:35.000Z"
+    },
+    {
+      "data": {
+        "answer": [
+          "192.0.2.10"
+        ],
+        "first": false,
+        "observed": "2026-11-11T12:02:35.000Z",
+        "previous": null
+      },
+      "kind": "dns",
+      "time": "2026-11-11T12:02:35.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:36.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0046",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:36.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:36.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:37.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0155",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:37.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:37.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:38.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0047",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:38.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:38.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:39.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:38.000Z",
+        "step": "Group 3 - consistency check of the ledger",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:38.000Z"
+    },
+    {
+      "data": {
+        "conclusion": "success",
+        "end": "2026-11-11T12:02:40.000Z",
+        "event": "step",
+        "job": "job",
+        "phase": "to-primary",
+        "start": "2026-11-11T12:02:39.000Z",
+        "step": "Upload diagnostic bundle",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:39.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:40.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0048",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:40.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:40.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:40.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "u0160",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "auth",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:02:40.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:40.000Z"
+    },
+    {
+      "data": {
+        "event": "probe_deposit",
+        "outcome": "skipped",
+        "phase": "to-primary",
+        "workflow": "failover"
+      },
+      "kind": "workflow_step",
+      "time": "2026-11-11T12:02:40.200Z"
+    },
+    {
+      "data": {
+        "name": "to-primary",
+        "state": "end"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:02:41.000Z"
+    },
+    {
+      "data": {
+        "name": "steady-primary",
+        "state": "start"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:02:41.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:42.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0049",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:42.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:42.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:44.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0050",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:44.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:44.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:45.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0165",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:45.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:45.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:46.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0051",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:46.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:46.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:47.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0165",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:47.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:47.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:48.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0052",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:48.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:48.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:50.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0053",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:50.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:50.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:52.045Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0054",
+        "latency_ms": 45.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:52.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:52.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:54.055Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0055",
+        "latency_ms": 55.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:54.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:54.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:55.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "a0175",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "account",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:55.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:55.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:56.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0056",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:56.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:56.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:02:57.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "h0175",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "health",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:57.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:57.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:02:58.050Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0057",
+        "latency_ms": 50.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:02:58.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:02:58.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": "writer",
+        "end": "2026-11-11T12:03:00.035Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "w0058",
+        "latency_ms": 35.0,
+        "ok": true,
+        "probe": "write",
+        "processed_region": null,
+        "served_by_region": "us-east-2",
+        "start": "2026-11-11T12:03:00.000Z",
+        "status": 201
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:03:00.000Z"
+    },
+    {
+      "data": {
+        "attempt": 1,
+        "balance_cents": null,
+        "database_role": null,
+        "end": "2026-11-11T12:03:00.040Z",
+        "error": null,
+        "key": null,
+        "kind": null,
+        "label": "u0180",
+        "latency_ms": 40.0,
+        "ok": true,
+        "probe": "auth",
+        "processed_region": null,
+        "served_by_region": "us-west-2",
+        "start": "2026-11-11T12:03:00.000Z",
+        "status": 200
+      },
+      "kind": "request",
+      "time": "2026-11-11T12:03:00.000Z"
+    },
+    {
+      "data": {
+        "metric": "AuroraGlobalDBReplicationLag",
+        "milliseconds": 1300.0,
+        "region": "us-west-2"
+      },
+      "kind": "metric_sample",
+      "time": "2026-11-11T12:03:00.000Z"
+    },
+    {
+      "data": {
+        "name": "steady-primary",
+        "state": "end"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:03:01.000Z"
+    },
+    {
+      "data": {
+        "name": "consistency",
+        "state": "start"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:03:01.000Z"
+    },
+    {
+      "data": {
+        "acked_expected": 69,
+        "balance_expected_max": 10001,
+        "balance_expected_min": 10001,
+        "balance_ok": true,
+        "band": 0,
+        "baseline_count": 10,
+        "consistency": {
+          "balances_match": true,
+          "chain_ok": true,
+          "consistent": true,
+          "counts_by_region": {
+            "us-east-2": 49,
+            "us-west-2": 20
+          },
+          "duplicate_keys": 0,
+          "replayed_balance_cents": 10001,
+          "stored_balance_cents": 10001,
+          "truncated": false
+        },
+        "failover_deposit_outcomes": [
+          "deposited",
+          "skipped"
+        ],
+        "label": "ledger",
+        "notes": [],
+        "problems": [],
+        "rpo_lost_max": 0,
+        "rpo_lost_min": 0,
+        "rpo_status": "zero_loss",
+        "stored_balance_cents": 10001,
+        "stored_count": 69,
+        "unexpected_extra": 0
+      },
+      "kind": "state_snapshot",
+      "time": "2026-11-11T12:03:01.500Z"
+    },
+    {
+      "data": {
+        "name": "consistency",
+        "state": "end"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:03:02.000Z"
+    },
+    {
+      "data": {
+        "detail": null,
+        "name": "RESULT",
+        "reason": null,
+        "verdict": "PASS"
+      },
+      "kind": "phase",
+      "time": "2026-11-11T12:03:02.000Z"
+    }
+  ],
+  "run_id": "2026-11-11T12-00-00Z",
+  "schema_version": 1
+}

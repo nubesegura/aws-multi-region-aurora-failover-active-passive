@@ -1,0 +1,1299 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  DR demo API stack. Regional REST API with a Cognito User Pools authorizer, six Lambda functions in the private subnets,
+  regional custom domain with an ACM certificate, logs and alarms. The same template is deployed in both data regions.
+# Naming: names are <acronym>-<region without dashes>-drdemo-<descriptor>-<EnvType>. The region code is derived from
+# AWS::Region with Join/Split, so no region, account or environment literal appears in this template.
+# Reserved concurrency is intentionally NOT set here (accepted deviation D26): the DR drill sets it to 0 and removes it
+# from the CLI, and a template value would drift or be reverted by the next stack update (design C21).
+# Mitigation for the database connection load: stage throttling (ThrottleRate/ThrottleBurst), the
+# 20 second function timeout and one database connection per warm execution environment.
+# A database-side max_connections limit was not added: it is not verified offline and a low value could lock out admin access.
+# Needs, in the same region, the account-level API Gateway CloudWatch Logs role from the bootstrap stack.
+
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - W3660 # CognitoUserPoolsAuthorizer explicitly declares the named AWS::ApiGateway::Authorizer alongside SAM Api.Auth.
+
+Parameters:
+  EnvType:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, prod]
+    Description: Environment tier, used in names, in the stage name and in the env-type tag. Project rule is dev and prod only.
+  ApiDomainName:
+    Type: String
+    AllowedPattern: ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$
+    Description: Custom domain name of the API (the same in both regions).
+  HostedZoneId:
+    Type: String
+    AllowedPattern: ^Z[A-Z0-9]{5,31}$
+    Description: Public hosted zone that serves ApiDomainName. ACM writes the DNS validation record there.
+  CognitoUserPoolArn:
+    Type: String
+    AllowedPattern: ^arn:aws[a-z-]*:cognito-idp:[a-z0-9-]+:[0-9]{12}:userpool/[a-z0-9-]+_[A-Za-z0-9]+$
+    Description: >-
+      Regional Cognito User Pool ARN validated by the REST API Cognito Authorizer (resolved from SSM at deploy time:
+      us-east-2 pool ARN for us-east-2 API, us-west-2 replica pool ARN for us-west-2 API).
+  CognitoBankClientId:
+    Type: String
+    AllowedPattern: ^[a-z0-9]{15,64}$
+    Description: Cognito App Client ID for the banking SPA (shared across primary and replica regions per MRR).
+  CognitoDashboardClientId:
+    Type: String
+    AllowedPattern: ^[a-z0-9]{15,64}$
+    Description: Cognito App Client ID for the monitoring dashboard SPA (shared across primary and replica regions per MRR).
+  AllowedOrigins:
+    Type: String
+    AllowedPattern: ^https://[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?,https://[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$
+    Description: >-
+      Comma-separated list of exactly two https:// origins, no spaces (monitoring site, then banking site;
+      https://<id>.cloudfront.net). The functions echo the request origin only when it is in the list. The gateway layer
+      (preflight and gateway-generated errors) answers with a wildcard origin, see A16 and gap G6.
+  DbEndpoint:
+    Type: String
+    MinLength: 1
+    Description: Aurora cluster endpoint of this region (database stack output DbClusterEndpoint).
+  DbName:
+    Type: String
+    Default: drdemo
+    AllowedPattern: ^[a-z][a-z0-9_]{0,62}$
+    Description: Database name.
+  DbClusterResourceId:
+    Type: String
+    AllowedPattern: ^cluster-[A-Z0-9]{10,64}$
+    Description: Cluster resource id of this region (database stack output DbClusterResourceId), used in the rds-db:connect ARN.
+  DbWriterUser:
+    Type: String
+    Default: app_writer
+    AllowedPattern: ^[a-z][a-z0-9_]{0,62}$
+    Description: Database user used only by create-transaction (INSERT and SELECT).
+  DbReaderUser:
+    Type: String
+    Default: app_reader
+    AllowedPattern: ^[a-z][a-z0-9_]{0,62}$
+    Description: Database user used by the read functions (SELECT only).
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    AllowedPattern: ^subnet-[0-9a-f]{8,17}$
+    Description: The two private subnets of this region (database stack output PrivateSubnetIds).
+  LambdaSecurityGroupId:
+    Type: String
+    AllowedPattern: ^sg-[0-9a-f]{8,17}$
+    Description: Security group of the functions (database stack output LambdaSecurityGroupId).
+  KmsKeyArn:
+    Type: String
+    AllowedPattern: ^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f-]{36}$
+    Description: Regional customer managed key that encrypts the log groups (database stack output KmsKeyArn).
+  AlertTopicArn:
+    Type: String
+    AllowedPattern: ^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:.+$
+    Description: Topic notified by the alarms (database stack output AlertTopicArn).
+  LogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+    Description: Application log level.
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653]
+    Description: Retention of every log group in days.
+  ThrottleRate:
+    Type: Number
+    Default: 20
+    MinValue: 1
+    Description: Steady-state requests per second on the stage.
+  ThrottleBurst:
+    Type: Number
+    Default: 40
+    MinValue: 1
+    Description: Burst requests on the stage.
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$
+    Description: Optional permissions boundary for the function roles. Empty means none (accepted deviation D15).
+
+Conditions:
+  HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, '']]
+
+Globals:
+  Function:
+    Runtime: python3.14
+    Architectures:
+      - arm64
+    MemorySize: 256
+    # 20 s: one attempt (connect 3 s + statement 5 s, socket backstop 8 s), one retry and the answer must fit (milestone 2 review, finding 2).
+    Timeout: 20
+    VpcConfig:
+      SubnetIds: !Ref PrivateSubnetIds
+      SecurityGroupIds:
+        - !Ref LambdaSecurityGroupId
+    Environment:
+      Variables:
+        DB_HOST: !Ref DbEndpoint
+        DB_PORT: '5432'
+        DB_NAME: !Ref DbName
+        ALLOWED_ORIGINS: !Ref AllowedOrigins
+        LOG_LEVEL: !Ref LogLevel
+    Tags:
+      team-owner: nube-segura
+      project-name: aws-multi-region-aurora-failover-active-passive
+      app-name: dr-demo
+      repo-name: aws-multi-region-aurora-failover-active-passive
+      env-type: !Ref EnvType
+
+Resources:
+  # ---------------------------------------------------------------- Functions
+  CreateTransactionFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: "Synchronous API Gateway invocation only: a DLQ applies to asynchronous invocations (D19)."
+          - id: CKV_AWS_115
+            comment: "Reserved concurrency is set from the CLI by the DR drill and must not be managed by the template (design C21)."
+          - id: CKV_AWS_173
+            comment: "The environment variables hold only host name, port, database name, user name, origins, log level and public client IDs; no secret exists (IAM database authentication)."
+    Properties:
+      FunctionName: !Sub ['fnc-${RC}-drdemo-create-transaction-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      Description: POST /transactions. Writes a transaction as the writer database user.
+      CodeUri: ../src/backend/
+      Handler: services.create_transaction.handler.handler
+      Role: !GetAtt CreateTransactionRole.Arn
+      Environment:
+        Variables:
+          DB_USER: !Ref DbWriterUser
+          COGNITO_ALLOWED_CLIENT_IDS: !Sub '${CognitoBankClientId},${CognitoDashboardClientId}'
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref CreateTransactionLogGroup
+      Events:
+        Post:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /transactions
+            Method: post
+
+  ListTransactionsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: "Synchronous API Gateway invocation only: a DLQ applies to asynchronous invocations (D19)."
+          - id: CKV_AWS_115
+            comment: "Reserved concurrency is set from the CLI by the DR drill and must not be managed by the template (design C21)."
+          - id: CKV_AWS_173
+            comment: "The environment variables hold only host name, port, database name, user name, origins, log level and public client IDs; no secret exists (IAM database authentication)."
+    Properties:
+      FunctionName: !Sub ['fnc-${RC}-drdemo-list-transactions-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      Description: GET /transactions. Reads the latest transactions as the reader database user.
+      CodeUri: ../src/backend/
+      Handler: services.list_transactions.handler.handler
+      Role: !GetAtt ListTransactionsRole.Arn
+      Environment:
+        Variables:
+          DB_USER: !Ref DbReaderUser
+          COGNITO_ALLOWED_CLIENT_IDS: !Sub '${CognitoBankClientId},${CognitoDashboardClientId}'
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref ListTransactionsLogGroup
+      Events:
+        Get:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /transactions
+            Method: get
+
+  GetStatsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: "Synchronous API Gateway invocation only: a DLQ applies to asynchronous invocations (D19)."
+          - id: CKV_AWS_115
+            comment: "Reserved concurrency is set from the CLI by the DR drill and must not be managed by the template (design C21)."
+          - id: CKV_AWS_173
+            comment: "The environment variables hold only host name, port, database name, user name, origins, log level and public client IDs; no secret exists (IAM database authentication)."
+    Properties:
+      FunctionName: !Sub ['fnc-${RC}-drdemo-get-stats-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      Description: GET /stats. Counts per region and latest transactions as the reader database user.
+      CodeUri: ../src/backend/
+      Handler: services.get_stats.handler.handler
+      Role: !GetAtt GetStatsRole.Arn
+      Environment:
+        Variables:
+          DB_USER: !Ref DbReaderUser
+          COGNITO_ALLOWED_CLIENT_IDS: !Sub '${CognitoBankClientId},${CognitoDashboardClientId}'
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref GetStatsLogGroup
+      Events:
+        Get:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /stats
+            Method: get
+
+  GetHealthFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: "Synchronous API Gateway invocation only: a DLQ applies to asynchronous invocations (D19)."
+          - id: CKV_AWS_115
+            comment: "Reserved concurrency is set from the CLI by the DR drill and must not be managed by the template (design C21)."
+          - id: CKV_AWS_173
+            comment: "The environment variables hold only host name, port, database name, user name, origins and log level; no secret exists (IAM database authentication)."
+    Properties:
+      FunctionName: !Sub ['fnc-${RC}-drdemo-get-health-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      Description: GET /health. Shallow, or deep (database check) with deep=true, as the reader database user.
+      CodeUri: ../src/backend/
+      Handler: services.get_health.handler.handler
+      Role: !GetAtt GetHealthRole.Arn
+      Environment:
+        Variables:
+          DB_USER: !Ref DbReaderUser
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref GetHealthLogGroup
+      Events:
+        Get:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /health
+            Method: get
+            Auth:
+              Authorizer: NONE
+
+  GetAccountFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: "Synchronous API Gateway invocation only: a DLQ applies to asynchronous invocations (D19)."
+          - id: CKV_AWS_115
+            comment: "Reserved concurrency is set from the CLI by the DR drill and must not be managed by the template (design C21)."
+          - id: CKV_AWS_173
+            comment: "The environment variables hold only host name, port, database name, user name, origins, log level and public client IDs; no secret exists (IAM database authentication)."
+    Properties:
+      FunctionName: !Sub ['fnc-${RC}-drdemo-get-account-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      Description: GET /account. Balance and movement count as the reader database user.
+      CodeUri: ../src/backend/
+      Handler: services.get_account.handler.handler
+      Role: !GetAtt GetAccountRole.Arn
+      Environment:
+        Variables:
+          DB_USER: !Ref DbReaderUser
+          COGNITO_ALLOWED_CLIENT_IDS: !Sub '${CognitoBankClientId},${CognitoDashboardClientId}'
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref GetAccountLogGroup
+      Events:
+        Get:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /account
+            Method: get
+
+  GetConsistencyFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: "Synchronous API Gateway invocation only: a DLQ applies to asynchronous invocations (D19)."
+          - id: CKV_AWS_115
+            comment: "Reserved concurrency is set from the CLI by the DR drill and must not be managed by the template (design C21)."
+          - id: CKV_AWS_173
+            comment: "The environment variables hold only host name, port, database name, user name, origins, log level and public client IDs; no secret exists (IAM database authentication)."
+    Properties:
+      FunctionName: !Sub ['fnc-${RC}-drdemo-get-consistency-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      Description: GET /consistency. Replays the ledger and checks the balance as the reader database user (on demand, longer timeout).
+      CodeUri: ../src/backend/
+      Handler: services.get_consistency.handler.handler
+      Timeout: 20
+      Role: !GetAtt GetConsistencyRole.Arn
+      Environment:
+        Variables:
+          DB_USER: !Ref DbReaderUser
+          COGNITO_ALLOWED_CLIENT_IDS: !Sub '${CognitoBankClientId},${CognitoDashboardClientId}'
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref GetConsistencyLogGroup
+      Events:
+        Get:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /consistency
+            Method: get
+
+  # ---------------------------------------------------------------- Function log groups
+  CreateTransactionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub ['/aws/lambda/fnc-${RC}-drdemo-create-transaction-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !Ref KmsKeyArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  ListTransactionsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub ['/aws/lambda/fnc-${RC}-drdemo-list-transactions-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !Ref KmsKeyArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  GetStatsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub ['/aws/lambda/fnc-${RC}-drdemo-get-stats-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !Ref KmsKeyArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  GetHealthLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub ['/aws/lambda/fnc-${RC}-drdemo-get-health-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !Ref KmsKeyArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  GetAccountLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub ['/aws/lambda/fnc-${RC}-drdemo-get-account-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !Ref KmsKeyArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  GetConsistencyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub ['/aws/lambda/fnc-${RC}-drdemo-get-consistency-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !Ref KmsKeyArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  # ---------------------------------------------------------------- Function roles (one per function)
+  # Each role: rds-db:connect on one database user of this cluster, log writes to its own log group, and the
+  # Lambda VPC network interface actions (Resource "*" is required by Lambda, deviation D17).
+  # No kms, secretsmanager, iam or sts actions.
+  CreateTransactionRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "ec2 network interface actions need Resource * for VPC-attached Lambda functions (D17); every other statement is scoped to an ARN."
+    Properties:
+      RoleName: !Sub ['iamr-${RC}-drdemo-create-transaction-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      MaxSessionDuration: 3600
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref 'AWS::NoValue']
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: function
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ConnectAsWriterUser
+                Effect: Allow
+                Action: rds-db:connect
+                Resource: !Sub arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DbClusterResourceId}/${DbWriterUser}
+              - Sid: WriteOwnLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub ${CreateTransactionLogGroup.Arn}:*
+              - Sid: VpcNetworkInterfaces
+                Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: '*'
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  ListTransactionsRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "ec2 network interface actions need Resource * for VPC-attached Lambda functions (D17); every other statement is scoped to an ARN."
+    Properties:
+      RoleName: !Sub ['iamr-${RC}-drdemo-list-transactions-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      MaxSessionDuration: 3600
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref 'AWS::NoValue']
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: function
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ConnectAsReaderUser
+                Effect: Allow
+                Action: rds-db:connect
+                Resource: !Sub arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DbClusterResourceId}/${DbReaderUser}
+              - Sid: WriteOwnLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub ${ListTransactionsLogGroup.Arn}:*
+              - Sid: VpcNetworkInterfaces
+                Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: '*'
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  GetStatsRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "ec2 network interface actions need Resource * for VPC-attached Lambda functions (D17); every other statement is scoped to an ARN."
+    Properties:
+      RoleName: !Sub ['iamr-${RC}-drdemo-get-stats-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      MaxSessionDuration: 3600
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref 'AWS::NoValue']
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: function
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ConnectAsReaderUser
+                Effect: Allow
+                Action: rds-db:connect
+                Resource: !Sub arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DbClusterResourceId}/${DbReaderUser}
+              - Sid: WriteOwnLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub ${GetStatsLogGroup.Arn}:*
+              - Sid: VpcNetworkInterfaces
+                Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: '*'
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  GetHealthRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "ec2 network interface actions need Resource * for VPC-attached Lambda functions (D17); every other statement is scoped to an ARN."
+    Properties:
+      RoleName: !Sub ['iamr-${RC}-drdemo-get-health-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      MaxSessionDuration: 3600
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref 'AWS::NoValue']
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: function
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ConnectAsReaderUser
+                Effect: Allow
+                Action: rds-db:connect
+                Resource: !Sub arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DbClusterResourceId}/${DbReaderUser}
+              - Sid: WriteOwnLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub ${GetHealthLogGroup.Arn}:*
+              - Sid: VpcNetworkInterfaces
+                Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: '*'
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  GetAccountRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "ec2 network interface actions need Resource * for VPC-attached Lambda functions (D17); every other statement is scoped to an ARN."
+    Properties:
+      RoleName: !Sub ['iamr-${RC}-drdemo-get-account-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      MaxSessionDuration: 3600
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref 'AWS::NoValue']
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: function
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ConnectAsReaderUser
+                Effect: Allow
+                Action: rds-db:connect
+                Resource: !Sub arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DbClusterResourceId}/${DbReaderUser}
+              - Sid: WriteOwnLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub ${GetAccountLogGroup.Arn}:*
+              - Sid: VpcNetworkInterfaces
+                Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: '*'
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  GetConsistencyRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "ec2 network interface actions need Resource * for VPC-attached Lambda functions (D17); every other statement is scoped to an ARN."
+    Properties:
+      RoleName: !Sub ['iamr-${RC}-drdemo-get-consistency-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      MaxSessionDuration: 3600
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref 'AWS::NoValue']
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: function
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ConnectAsReaderUser
+                Effect: Allow
+                Action: rds-db:connect
+                Resource: !Sub arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DbClusterResourceId}/${DbReaderUser}
+              - Sid: WriteOwnLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub ${GetConsistencyLogGroup.Arn}:*
+              - Sid: VpcNetworkInterfaces
+                Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: '*'
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  # ---------------------------------------------------------------- REST API
+  Api:
+    Type: AWS::Serverless::Api
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_73
+            comment: "No X-Ray: the functions have no route to the X-Ray API from the private subnets (D14)."
+          - id: CKV_AWS_120
+            comment: "Caching is off on purpose: the stats and the health must always reflect the database and cache clusters bill per hour."
+    Properties:
+      Name: !Sub ['apig-${RC}-drdemo-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      StageName: !Ref EnvType
+      OpenApiVersion: 3.0.1
+      EndpointConfiguration:
+        Type: REGIONAL
+      DisableExecuteApiEndpoint: true
+      TracingEnabled: false
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Ref CognitoUserPoolArn
+            Identity:
+              Header: Authorization
+      # A16 and gap G6: one static header cannot hold two origins, so the gateway layer (preflight and the errors the
+      # gateway itself generates: missing/invalid token, throttle, fenced function) answers '*'. No cookies are used:
+      # the Bearer token travels in the Authorization header. The functions echo the exact origin from ALLOWED_ORIGINS.
+      Cors:
+        AllowOrigin: "'*'"
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Authorization,Content-Type,Idempotency-Key'"
+        MaxAge: "'600'"
+      GatewayResponses:
+        UNAUTHORIZED:
+          StatusCode: '401'
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Authorization,Content-Type,Idempotency-Key'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        ACCESS_DENIED:
+          StatusCode: '403'
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Authorization,Content-Type,Idempotency-Key'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Authorization,Content-Type,Idempotency-Key'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Authorization,Content-Type,Idempotency-Key'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+      AccessLogSetting:
+        DestinationArn: !GetAtt AccessLogGroup.Arn
+        # No request or response bodies, no raw tokens (only verified caller sub and username claims, requirement 2.8).
+        Format: '{"requestId":"$context.requestId","sourceIp":"$context.identity.sourceIp","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLatency":"$context.responseLatency","integrationStatus":"$context.integrationStatus","authorizerLatency":"$context.authorizer.latency","sub":"$context.authorizer.claims.sub","username":"$context.authorizer.claims.cognito:username","errorMessage":"$context.error.message"}'
+      MethodSettings:
+        - ResourcePath: /*
+          HttpMethod: '*'
+          LoggingLevel: ERROR
+          DataTraceEnabled: false
+          MetricsEnabled: true
+          ThrottlingRateLimit: !Ref ThrottleRate
+          ThrottlingBurstLimit: !Ref ThrottleBurst
+      Tags:
+        team-owner: nube-segura
+        project-name: aws-multi-region-aurora-failover-active-passive
+        app-name: dr-demo
+        repo-name: aws-multi-region-aurora-failover-active-passive
+        env-type: !Ref EnvType
+
+  # Explicit regional Cognito User Pools Authorizer following naming convention apiga-<rc>-drdemo-cognito-<env>.
+  CognitoUserPoolsAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: !Sub ['apiga-${RC}-drdemo-cognito-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      RestApiId: !Ref Api
+      Type: COGNITO_USER_POOLS
+      IdentitySource: method.request.header.Authorization
+      ProviderARNs:
+        - !Ref CognitoUserPoolArn
+
+  AccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub ['/aws/apigateway/apig-${RC}-drdemo-${EnvType}-access', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !Ref KmsKeyArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  # Execution log group created by API Gateway at ERROR level. Pre-created for retention, encryption and tags.
+  ExecutionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub API-Gateway-Execution-Logs_${Api}/${EnvType}
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !Ref KmsKeyArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  # ---------------------------------------------------------------- Custom domain and certificate
+  # Both regions request a certificate for the same name; the DNS validation record is identical and is written to
+  # the hosted zone by CloudFormation. Keep the record in place so ACM can renew the certificate.
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref ApiDomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref ApiDomainName
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+        - Key: Name
+          Value: !Sub ['acm-${RC}-drdemo-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+
+  DomainName:
+    Type: AWS::ApiGateway::DomainName
+    Properties:
+      DomainName: !Ref ApiDomainName
+      RegionalCertificateArn: !Ref Certificate
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      SecurityPolicy: TLS_1_2
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  BasePathMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    Properties:
+      DomainName: !Ref DomainName
+      RestApiId: !Ref Api
+      Stage: !Ref Api.Stage
+
+  # ---------------------------------------------------------------- Alarms
+  Api4xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ['alrm-${RC}-drdemo-api-4xx-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      AlarmDescription: The API returned more than 25 client/authorizer errors (401/4XX) in 5 minutes. Check the access logs for unauthorized token attempts.
+      Namespace: AWS/ApiGateway
+      MetricName: 4XXError
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub ['apig-${RC}-drdemo-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+        - Name: Stage
+          Value: !Ref EnvType
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 25
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref AlertTopicArn
+      OKActions:
+        - !Ref AlertTopicArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  Api5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ['alrm-${RC}-drdemo-api-5xx-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      AlarmDescription: The API returned more than 5 server errors in 5 minutes. Check the function logs and the database state.
+      Namespace: AWS/ApiGateway
+      MetricName: 5XXError
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub ['apig-${RC}-drdemo-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+        - Name: Stage
+          Value: !Ref EnvType
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref AlertTopicArn
+      OKActions:
+        - !Ref AlertTopicArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  # One alarm over the six functions (metric math) keeps the alarm count low.
+  LambdaErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ['alrm-${RC}-drdemo-lambda-errors-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      AlarmDescription: The functions reported errors (sum of the six functions in 5 minutes). Check the function log groups.
+      Metrics:
+        - Id: total
+          Expression: SUM(METRICS())
+          Label: Errors of all functions
+          ReturnData: true
+        - Id: m1
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref CreateTransactionFunction
+            Period: 300
+            Stat: Sum
+        - Id: m2
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref ListTransactionsFunction
+            Period: 300
+            Stat: Sum
+        - Id: m3
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref GetStatsFunction
+            Period: 300
+            Stat: Sum
+        - Id: m4
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref GetHealthFunction
+            Period: 300
+            Stat: Sum
+        - Id: m5
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref GetAccountFunction
+            Period: 300
+            Stat: Sum
+        - Id: m6
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref GetConsistencyFunction
+            Period: 300
+            Stat: Sum
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref AlertTopicArn
+      OKActions:
+        - !Ref AlertTopicArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  LambdaThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ['alrm-${RC}-drdemo-lambda-throttles-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      AlarmDescription: The functions were throttled (sum of the six functions in 5 minutes). Expected while the drill sets reserved concurrency to 0.
+      Metrics:
+        - Id: total
+          Expression: SUM(METRICS())
+          Label: Throttles of all functions
+          ReturnData: true
+        - Id: m1
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Throttles
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref CreateTransactionFunction
+            Period: 300
+            Stat: Sum
+        - Id: m2
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Throttles
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref ListTransactionsFunction
+            Period: 300
+            Stat: Sum
+        - Id: m3
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Throttles
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref GetStatsFunction
+            Period: 300
+            Stat: Sum
+        - Id: m4
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Throttles
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref GetHealthFunction
+            Period: 300
+            Stat: Sum
+        - Id: m5
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Throttles
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref GetAccountFunction
+            Period: 300
+            Stat: Sum
+        - Id: m6
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Throttles
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref GetConsistencyFunction
+            Period: 300
+            Stat: Sum
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref AlertTopicArn
+      OKActions:
+        - !Ref AlertTopicArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  CertificateExpiryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ['alrm-${RC}-drdemo-cert-expiry-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      AlarmDescription: The API certificate expires in less than 30 days. Check that the DNS validation record still exists.
+      Namespace: AWS/CertificateManager
+      MetricName: DaysToExpiry
+      Dimensions:
+        - Name: CertificateArn
+          Value: !Ref Certificate
+      Statistic: Minimum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: 30
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref AlertTopicArn
+      OKActions:
+        - !Ref AlertTopicArn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+Outputs:
+  RegionalDomainName:
+    Description: Regional domain name of the custom domain (target of the Route 53 alias).
+    Value: !GetAtt DomainName.RegionalDomainName
+  RegionalHostedZoneId:
+    Description: Hosted zone id of the regional domain name (alias target zone).
+    Value: !GetAtt DomainName.RegionalHostedZoneId
+  ApiId:
+    Description: REST API id.
+    Value: !Ref Api
+  CertificateArn:
+    Description: ACM certificate of the custom domain.
+    Value: !Ref Certificate

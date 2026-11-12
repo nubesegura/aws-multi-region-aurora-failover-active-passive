@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Online bank</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="page-header">
+    <h1>Online bank</h1>
+    <div id="user-profile" class="user-profile" hidden>
+      <span class="user-badge">Signed in as <strong id="user-display">-</strong></span>
+      <button type="button" id="sign-out-button">Sign Out</button>
+    </div>
+  </header>
+
+  <main>
+    <p id="status" class="status" role="status" aria-live="polite">Loading.</p>
+
+    <section id="login-section" aria-labelledby="login-title" class="card login-card">
+      <h2 id="login-title">Sign in to your account</h2>
+      <p id="hint" class="hint">Sign in as bank-operator to view your balance and execute movements.</p>
+      <form id="login-form" class="login-form" autocomplete="off" novalidate>
+        <div class="field">
+          <label for="login-username">Username</label>
+          <input id="login-username" name="username" type="text" autocomplete="username" spellcheck="false" required>
+        </div>
+        <div class="field">
+          <label for="login-password">Password</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" id="sign-in-button">Sign In</button>
+      </form>
+      <p id="login-error" class="message message-error" role="alert" aria-live="assertive" hidden></p>
+    </section>
+
+    <div id="authenticated-view" hidden>
+      <section aria-labelledby="balance-title" class="cards">
+        <h2 id="balance-title" class="visually-hidden">Balance</h2>
+        <div class="card">
+          <h3>Current balance</h3>
+          <p class="big" id="balance">-</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="move-title">
+        <h2 id="move-title">New operation</h2>
+        <form id="move-form" class="move-form" novalidate>
+          <div class="field">
+            <label for="move-type">Operation</label>
+            <select id="move-type" name="type">
+              <option value="deposit">Deposit</option>
+              <option value="withdrawal">Withdrawal</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="move-amount">Amount</label>
+            <input id="move-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" aria-describedby="amount-error">
+          </div>
+          <button type="submit" id="execute-button">Execute</button>
+        </form>
+        <p id="amount-error" class="message message-error" hidden></p>
+        <p id="operate-status" class="message" role="status" aria-live="polite" hidden></p>
+
+        <dl id="result" class="result" hidden>
+          <div><dt>Result</dt><dd id="r-result"></dd></div>
+          <div><dt>Updated balance</dt><dd id="r-balance"></dd></div>
+          <div><dt>Answered by region</dt><dd id="r-served"></dd></div>
+          <div><dt>Processed in region</dt><dd id="r-processed"></dd></div>
+          <div><dt>Database role</dt><dd id="r-role"></dd></div>
+          <div><dt>Round trip</dt><dd id="r-round"></dd></div>
+          <div><dt>Server time</dt><dd id="r-server"></dd></div>
+          <div><dt>Attempts</dt><dd id="r-attempts"></dd></div>
+        </dl>
+      </section>
+
+      <section aria-labelledby="ops-title">
+        <h2 id="ops-title">Operations in this session</h2>
+        <p id="latency-summary" class="hint">No operations yet.</p>
+        <div class="table-wrap">
+          <table>
+            <caption class="visually-hidden">Operations of this session, newest first</caption>
+            <thead>
+              <tr>
+                <th scope="col">Id</th>
+                <th scope="col">Type</th>
+                <th scope="col" class="num">Amount</th>
+                <th scope="col" class="num">Balance after</th>
+                <th scope="col">Region</th>
+                <th scope="col">Backend</th>
+                <th scope="col" class="num">Round trip (ms)</th>
+                <th scope="col" class="num">Server (ms)</th>
+                <th scope="col" class="num">Attempts</th>
+              </tr>
+            </thead>
+            <tbody id="ops-body"></tbody>
+          </table>
+        </div>
+        <p class="actions"><button type="button" id="verify-button">Verify my operations</button></p>
+        <p id="verify-message" class="message" role="status" aria-live="polite" hidden></p>
+        <ul id="verify-missing" class="missing-list" hidden></ul>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

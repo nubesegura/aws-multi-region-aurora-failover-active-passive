@@ -1,0 +1,2 @@
+# checkov, installed in its own virtual environment by the CI templates job (its exact boto3 pin conflicts with aws-sam-cli).
+checkov==3.3.22

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>DR demo dashboard</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="page-header">
+    <h1>Aurora Global Database DR demo: monitor</h1>
+    <div id="user-profile" class="user-profile" hidden>
+      <span class="user-badge">Signed in as <strong id="user-display">-</strong></span>
+      <button type="button" id="sign-out-button">Sign Out</button>
+    </div>
+  </header>
+
+  <main>
+    <p id="status" class="status" role="status" aria-live="polite">Loading.</p>
+
+    <div id="auth-banner" class="banner banner-error" role="alert" hidden></div>
+
+    <section id="login-section" aria-labelledby="login-title" class="card login-card">
+      <h2 id="login-title">Sign in to the monitoring dashboard</h2>
+      <p id="hint" class="hint">Sign in as dashboard-viewer to start live 5-second polling.</p>
+      <form id="login-form" class="login-form" autocomplete="off" novalidate>
+        <div class="field">
+          <label for="login-username">Username</label>
+          <input id="login-username" name="username" type="text" autocomplete="username" spellcheck="false" required>
+        </div>
+        <div class="field">
+          <label for="login-password">Password</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" id="sign-in-button">Sign In</button>
+      </form>
+      <p id="login-error" class="banner banner-error" role="alert" aria-live="assertive" hidden></p>
+    </section>
+
+    <div id="authenticated-view" hidden>
+      <div id="unavailable" class="banner banner-error" hidden>
+        <strong>Unavailable.</strong>
+        <span id="unavailable-text"></span>
+      </div>
+      <div id="change-banner" class="banner banner-change" hidden></div>
+
+      <section aria-labelledby="summary-title" class="cards">
+        <h2 id="summary-title" class="visually-hidden">Summary</h2>
+        <div class="card" id="region-card">
+          <h3>Serving region</h3>
+          <p class="big" id="active-region">-</p>
+        </div>
+        <div class="card" id="role-card">
+          <h3>Database role</h3>
+          <p class="big" id="database-role">-</p>
+        </div>
+        <div class="card">
+          <h3>Current balance</h3>
+          <p class="big" id="balance">-</p>
+        </div>
+        <div class="card">
+          <h3>Total movements</h3>
+          <p class="big" id="total-count">-</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="regions-title">
+        <h2 id="regions-title">Movements by processing region</h2>
+        <ul id="region-list" class="region-list"></ul>
+      </section>
+
+      <section aria-labelledby="timeline-title">
+        <h2 id="timeline-title">Region and role changes</h2>
+        <ul id="timeline" class="timeline"></ul>
+        <p id="empty-timeline" class="hint">No change seen since this page was opened.</p>
+      </section>
+
+      <section aria-labelledby="latency-title">
+        <h2 id="latency-title">Poll round trip (this browser)</h2>
+        <p id="latency-text" class="hint">No samples yet.</p>
+      </section>
+
+      <section aria-labelledby="history-title">
+        <h2 id="history-title">Latest 50 movements</h2>
+        <div class="table-wrap">
+          <table>
+            <caption class="visually-hidden">Latest movements, newest first</caption>
+            <thead>
+              <tr>
+                <th scope="col">Time (UTC)</th>
+                <th scope="col">Type</th>
+                <th scope="col" class="num">Amount</th>
+                <th scope="col" class="num">Balance after</th>
+                <th scope="col">Processed region</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+        <p id="empty-history" class="hint" hidden>No movements yet.</p>
+      </section>
+
+      <section aria-labelledby="verify-title">
+        <h2 id="verify-title">Ledger consistency</h2>
+        <p class="hint">Runs only when requested; it reads the whole ledger.</p>
+        <button type="button" id="verify-button">Verify</button>
+        <p id="verify-result" class="verify-result" role="status" aria-live="polite" hidden></p>
+        <dl id="verify-rows" class="verify-rows" hidden></dl>
+      </section>
+
+      <p class="footer">Last successful update: <span id="last-update">never</span></p>
+    </div>
+  </main>
+</body>
+</html>
