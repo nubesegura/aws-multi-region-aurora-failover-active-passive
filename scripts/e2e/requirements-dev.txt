@@ -7,6 +7,7 @@ s3transfer==0.19.2
 urllib3==2.8.0
 pytest==9.1.1
 pytest-cov==7.1.0
+pytest-timeout==2.4.0
 coverage==7.16.2
 ruff==0.16.10
 mypy==2.4.0

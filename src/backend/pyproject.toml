@@ -4,6 +4,8 @@
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+# Every test is bounded (pytest-timeout): a hung test fails instead of leaving an orphan process.
+timeout = 120
 
 [tool.coverage.run]
 branch = true
