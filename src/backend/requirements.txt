@@ -1,7 +1,7 @@
 # Runtime dependencies of the Lambda functions, pinned (direct and transitive).
 # boto3 is provided by the Lambda runtime and is intentionally not listed.
 pg8000==1.31.5
-scramp==1.4.17
+scramp==1.5.0
 asn1crypto==1.5.1
 python-dateutil==2.9.0.post0
 six==1.17.0
