@@ -1,0 +1,26 @@
+# Dependency updates. Python runtime pins of the Lambda functions, the backend dev tools, the CI tools and the
+# GitHub Actions (pinned by commit SHA: Dependabot keeps the version comment next to the SHA up to date).
+# npm: the dashboard has no package.json (vanilla JS, no dependencies), so there is no npm entry.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /src/backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+  - package-ecosystem: pip
+    directory: /.github/ci
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies

@@ -1,0 +1,686 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  DR demo database stack. KMS key, security groups, Aurora PostgreSQL provisioned cluster and one instance.
+  Role=primary also creates the Aurora global cluster; Role=secondary joins it. Deployed once per data region, after the network stack.
+# Naming: names are <acronym>-<region without dashes>-drdemo-<descriptor>-<EnvType>. The region code is derived from
+# AWS::Region with Join/Split, so no region, account or environment literal appears in this template.
+# Role means the role AT CREATION. RDS swaps the real roles at runtime (switchover/failover): do not update the
+# clusters from this template after a drill (see the global cluster comments).
+
+Parameters:
+  EnvType:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, prod]
+    Description: Environment tier, used in names and in the env-type tag. Project rule is dev and prod only.
+  Role:
+    Type: String
+    AllowedValues: [primary, secondary]
+    Description: Role at creation. primary creates the global cluster and the managed master secret; secondary joins the global cluster.
+  DbInstanceClass:
+    Type: String
+    Default: db.r6g.large
+    AllowedPattern: ^db\.[a-z0-9]+\.[a-z0-9]+$
+    Description: Aurora instance class. Burstable db.t* classes are not supported by Global Database. Verify with describe-orderable-db-instance-options.
+  EngineVersion:
+    Type: String
+    Default: '16.15'
+    AllowedPattern: ^[0-9]+\.[0-9]+$
+    Description: "Aurora PostgreSQL engine version. Must support Global Database in both regions and be identical in both stacks. Do not change it by a stack update after creation: upgrades go through modify-global-cluster (RDS upgrades the members), then both stacks are redeployed with the new value. AutoMinorVersionUpgrade can also move a member ahead of the template value."
+  DbName:
+    Type: String
+    Default: drdemo
+    AllowedPattern: ^[a-z][a-z0-9_]{0,62}$
+    Description: Initial database name (primary only).
+  DbMasterUsername:
+    Type: String
+    Default: dbadmin
+    AllowedPattern: ^(?!(postgres|admin|root|sa|master|mysql)$)[a-z][a-z0-9_]{2,30}$
+    Description: Master user name (primary only). Not a reserved default name. The password is generated and managed by RDS in Secrets Manager.
+  DeletionProtection:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Deletion protection of the cluster. The destroy procedure turns it off by CLI as an explicit first step.
+  EnableDataApi:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: >-
+      RDS Data API (EnableHttpEndpoint), primary only. Set to true by the deploy script only for the one-time schema
+      bootstrap, then back to false by a stack update before any drill (threat model T-MASTER, D23).
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC of this region (network stack output VpcId).
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The two private subnets of this region (network stack output PrivateSubnetIds).
+  GlobalClusterIdentifier:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^[a-z][a-z0-9-]{0,62}$
+    Description: Primary stack, leave empty to use the generated name. Secondary stack, the global cluster identifier output by the primary stack.
+  PrimaryClusterArn:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^arn:aws[a-z-]*:rds:[a-z0-9-]+:[0-9]{12}:cluster:[a-z][a-z0-9-]{0,62}$
+    Description: Secondary stack only. ARN of the primary cluster, used to derive the source region of the encrypted replica.
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653]
+    Description: Retention of the RDS log group in days.
+  AlertEmail:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^[^@\s]+@[^@\s]+\.[^@\s]+$
+    Description: Optional e-mail subscribed to the alert topic. Empty means no subscription.
+  PreferredMaintenanceWindow:
+    Type: String
+    Default: sun:06:00-sun:06:30
+    AllowedPattern: ^(mon|tue|wed|thu|fri|sat|sun):[0-2][0-9]:[0-5][0-9]-(mon|tue|wed|thu|fri|sat|sun):[0-2][0-9]:[0-5][0-9]$
+    Description: Maintenance window (UTC) of the cluster and its instance. Use the same value in both regions so automatic minor upgrades happen together.
+  KeyAdminRoleArn:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$
+    Description: Optional role that administers the KMS key (the CloudFormation execution role). Empty means the account root statement is the administrator.
+
+Rules:
+  SecondaryInputs:
+    RuleCondition: !Equals [!Ref Role, secondary]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref GlobalClusterIdentifier, '']]
+        AssertDescription: Role=secondary needs GlobalClusterIdentifier.
+      - Assert: !Not [!Equals [!Ref PrimaryClusterArn, '']]
+        AssertDescription: Role=secondary needs PrimaryClusterArn.
+      - Assert: !Equals [!Ref EnableDataApi, 'false']
+        AssertDescription: The Data API is only available on the primary cluster.
+
+Conditions:
+  IsPrimary: !Equals [!Ref Role, primary]
+  IsSecondary: !Equals [!Ref Role, secondary]
+  DataApiOn: !And [!Condition IsPrimary, !Equals [!Ref EnableDataApi, 'true']]
+  GlobalIdGiven: !Not [!Equals [!Ref GlobalClusterIdentifier, '']]
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, '']]
+  HasKeyAdmin: !Not [!Equals [!Ref KeyAdminRoleArn, '']]
+
+Resources:
+  # ---------------------------------------------------------------- KMS
+  DataKey:
+    Type: AWS::KMS::Key
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_33
+            comment: "The wildcard principal is limited by kms:CallerAccount and kms:ViaService (rds and secretsmanager of this region); this is the standard service-use pattern, not a public key."
+    Properties:
+      Description: DR demo regional key for Aurora, the managed master secret, log groups and the alert topic.
+      Enabled: true
+      EnableKeyRotation: true
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AccountRootDelegatesToIam
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+          - Sid: KeyAdministration
+            Effect: Allow
+            Principal:
+              AWS: !If [HasKeyAdmin, !Ref KeyAdminRoleArn, !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root']
+            Action:
+              - kms:Describe*
+              - kms:PutKeyPolicy
+              - kms:Create*
+              - kms:Update*
+              - kms:Enable*
+              - kms:RevokeGrant
+              - kms:List*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:RetireGrant
+            Resource: '*'
+          - Sid: UseThroughRdsSecretsManagerAndSnsOfThisAccount
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+            Condition:
+              StringEquals:
+                kms:CallerAccount: !Ref AWS::AccountId
+                kms:ViaService:
+                  - !Sub rds.${AWS::Region}.amazonaws.com
+                  - !Sub secretsmanager.${AWS::Region}.amazonaws.com
+                  - !Sub sns.${AWS::Region}.amazonaws.com
+          - Sid: CreateGrantsForAwsServicesOnly
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: kms:CreateGrant
+            Resource: '*'
+            Condition:
+              Bool:
+                kms:GrantIsForAWSResource: 'true'
+              StringEquals:
+                kms:CallerAccount: !Ref AWS::AccountId
+                kms:ViaService:
+                  - !Sub rds.${AWS::Region}.amazonaws.com
+                  - !Sub secretsmanager.${AWS::Region}.amazonaws.com
+          - Sid: CloudWatchLogsEncryption
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*
+          - Sid: CloudWatchAlarmsPublishToEncryptedTopic
+            Effect: Allow
+            Principal:
+              Service: cloudwatch.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:*
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+        - Key: Name
+          Value: !Sub ['kms-${RC}-drdemo-data-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+
+  DataKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub ['alias/kms-${RC}-drdemo-data-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      TargetKeyId: !Ref DataKey
+
+  # The group has no ingress. Its only egress is the database port to the database group.
+  # The rule that points to DbSecurityGroup is inline: DbSecurityGroup does not reference this group (no cycle).
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ['sgp-${RC}-drdemo-lambda-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      GroupDescription: DR demo Lambda functions. No ingress. Egress only to the database security group on 5432.
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          DestinationSecurityGroupId: !GetAtt DbSecurityGroup.GroupId
+          Description: PostgreSQL to the Aurora security group only
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+        - Key: Name
+          Value: !Sub ['sgp-${RC}-drdemo-lambda-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+
+  # Ingress comes from a standalone rule (below). The inline egress rule replaces the default allow-all egress
+  # with a rule that matches no real destination (loopback), because security groups are stateful.
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ['sgp-${RC}-drdemo-db-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      GroupDescription: DR demo Aurora cluster. Ingress 5432 from the Lambda security group only. No outbound traffic.
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 127.0.0.1/32
+          Description: No-op rule that replaces the default allow-all egress
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+        - Key: Name
+          Value: !Sub ['sgp-${RC}-drdemo-db-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+
+  DbIngressFromLambda:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt DbSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !GetAtt LambdaSecurityGroup.GroupId
+      Description: PostgreSQL from the Lambda security group only
+
+  # ---------------------------------------------------------------- Aurora
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: !Sub ['dbsg-${RC}-drdemo-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      DBSubnetGroupDescription: DR demo private subnets in two Availability Zones
+      SubnetIds: !Ref PrivateSubnetIds
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  # Cluster parameter group (acronym dbpg, descriptor cluster). The family follows the engine major version.
+  ClusterParameterGroup:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      DBClusterParameterGroupName: !Sub ['dbpg-${RC}-drdemo-cluster-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      Description: DR demo Aurora PostgreSQL cluster parameters. TLS is mandatory.
+      Family: !Join ['', ['aurora-postgresql', !Select [0, !Split ['.', !Ref EngineVersion]]]]
+      Parameters:
+        rds.force_ssl: '1'
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  # Pre-created so the log group has retention, encryption and tags (RDS would create it without them).
+  DbLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub
+        - /aws/rds/cluster/rdsc-${RC}-drdemo-${EnvType}/postgresql
+        - RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !GetAtt DataKey.Arn
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  # Global cluster: created by the primary stack only. UpdateReplacePolicy Retain and no property changes by stack
+  # update: after a switchover RDS owns the membership. DeletionPolicy Snapshot is not available for this resource type.
+  GlobalCluster:
+    Type: AWS::RDS::GlobalCluster
+    Condition: IsPrimary
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+    Properties:
+      GlobalClusterIdentifier: !If
+        - GlobalIdGiven
+        - !Ref GlobalClusterIdentifier
+        - !Sub
+          - rdsg-${RC}-drdemo-${EnvType}
+          - RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]
+      Engine: aurora-postgresql
+      EngineVersion: !Ref EngineVersion
+      StorageEncrypted: true
+      DeletionProtection: !Ref DeletionProtection
+
+  # Master credentials of the primary cluster, generated by Secrets Manager and used only by the schema bootstrap (Data API).
+  # The name carries a per-stack suffix because a deleted secret keeps its name reserved for the recovery window, which would
+  # block a redeploy after a destroy. No rotation: Aurora global databases do not support managed master passwords.
+  MasterSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: IsPrimary
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_149
+            comment: "Rotation is not supported for the master credentials of an Aurora global database; the secret is read only by the one-time schema bootstrap."
+          - id: CKV2_AWS_57
+            comment: "Same reason: automatic rotation of the master credentials is not available for an Aurora global database."
+    Properties:
+      Name: !Sub
+        - sm-${RC}-drdemo-master-${EnvType}-${Suffix}
+        - RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]
+          Suffix: !Select [0, !Split ['-', !Select [2, !Split ['/', !Ref 'AWS::StackId']]]]
+      Description: Master credentials of the primary Aurora cluster; read only by the schema bootstrap.
+      KmsKeyId: !GetAtt DataKey.Arn
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${DbMasterUsername}"}'
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludePunctuation: true
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  DbCluster:
+    Type: AWS::RDS::DBCluster
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    DependsOn: DbLogGroup
+    Properties:
+      DBClusterIdentifier: !Sub ['rdsc-${RC}-drdemo-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      Engine: aurora-postgresql
+      EngineVersion: !Ref EngineVersion
+      EngineMode: provisioned
+      Port: 5432
+      DatabaseName: !If [IsPrimary, !Ref DbName, !Ref 'AWS::NoValue']
+      MasterUsername: !If [IsPrimary, !Ref DbMasterUsername, !Ref 'AWS::NoValue']
+      # ManageMasterUserPassword is not supported for an Aurora global database: the password comes from MasterSecret.
+      MasterUserPassword: !If
+        - IsPrimary
+        - !Sub '{{resolve:secretsmanager:${MasterSecret}:SecretString:password}}'
+        - !Ref 'AWS::NoValue'
+      GlobalClusterIdentifier: !If [IsPrimary, !Ref GlobalCluster, !Ref GlobalClusterIdentifier]
+      SourceRegion: !If [IsSecondary, !Select [3, !Split [':', !Ref PrimaryClusterArn]], !Ref 'AWS::NoValue']
+      StorageEncrypted: true
+      KmsKeyId: !GetAtt DataKey.Arn
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VpcSecurityGroupIds:
+        - !GetAtt DbSecurityGroup.GroupId
+      DBClusterParameterGroupName: !Ref ClusterParameterGroup
+      EnableIAMDatabaseAuthentication: true
+      EnableHttpEndpoint: !If [DataApiOn, true, false]
+      BackupRetentionPeriod: 1
+      CopyTagsToSnapshot: true
+      DeletionProtection: !Ref DeletionProtection
+      PreferredMaintenanceWindow: !Ref PreferredMaintenanceWindow
+      EnableCloudwatchLogsExports:
+        - postgresql
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+        - Key: sec-confidenciality
+          Value: internal
+        - Key: sec-integrity
+          Value: tolerable-impact
+        - Key: sec-avaliability
+          Value: tolerable-impact
+        - Key: sec-domain
+          Value: na
+        - Key: sec-pii
+          Value: na
+        - Key: sec-compliance
+          Value: na
+
+  DbInstance:
+    Type: AWS::RDS::DBInstance
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_118
+            comment: "Enhanced monitoring needs an extra IAM role and per-second metrics cost; CloudWatch metrics and the postgresql log export are enough for a demo."
+    Properties:
+      DBInstanceIdentifier: !Sub ['rds-${RC}-drdemo-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      DBClusterIdentifier: !Ref DbCluster
+      DBInstanceClass: !Ref DbInstanceClass
+      Engine: aurora-postgresql
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      PubliclyAccessible: false
+      AutoMinorVersionUpgrade: true
+      EnablePerformanceInsights: false
+      MonitoringInterval: 0
+      PreferredMaintenanceWindow: !Ref PreferredMaintenanceWindow
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  # ---------------------------------------------------------------- Alerts
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ['sns-${RC}-drdemo-alerts-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      KmsMasterKeyId: !GetAtt DataKey.Arn
+      Subscription: !If
+        - HasAlertEmail
+        - - Protocol: email
+            Endpoint: !Ref AlertEmail
+        - !Ref 'AWS::NoValue'
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  AlertTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref AlertTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudWatchAlarmsOfThisAccount
+            Effect: Allow
+            Principal:
+              Service: cloudwatch.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref AlertTopic
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal:
+              AWS: '*'
+            Action: sns:Publish
+            Resource: !Ref AlertTopic
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  # Exists in both stacks so the alarm follows the cluster that becomes the secondary after a swap.
+  # The metric only exists for a secondary member: missing data is not breaching.
+  ReplicationLagAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ['alrm-${RC}-drdemo-replication-lag-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      AlarmDescription: Aurora Global Database replication lag above 5 seconds. Check the secondary cluster before any switchover or failover.
+      Namespace: AWS/RDS
+      MetricName: AuroraGlobalDBReplicationLag
+      Dimensions:
+        - Name: DBClusterIdentifier
+          Value: !Ref DbCluster
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      Threshold: 5000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  CpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ['alrm-${RC}-drdemo-db-cpu-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      AlarmDescription: Aurora CPU above 80 percent for 15 minutes. Check the connection count and the query load.
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: DBClusterIdentifier
+          Value: !Ref DbCluster
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+  ConnectionsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ['alrm-${RC}-drdemo-db-connections-${EnvType}', {RC: !Join ['', !Split ['-', !Ref 'AWS::Region']]}]
+      AlarmDescription: More than 100 database connections for 10 minutes. Each warm execution environment keeps one connection; check for a request storm.
+      Namespace: AWS/RDS
+      MetricName: DatabaseConnections
+      Dimensions:
+        - Name: DBClusterIdentifier
+          Value: !Ref DbCluster
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 100
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+      Tags:
+        - Key: team-owner
+          Value: nube-segura
+        - Key: project-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: app-name
+          Value: dr-demo
+        - Key: repo-name
+          Value: aws-multi-region-aurora-failover-active-passive
+        - Key: env-type
+          Value: !Ref EnvType
+
+Outputs:
+  LambdaSecurityGroupId:
+    Description: Security group to attach to the Lambda functions.
+    Value: !GetAtt LambdaSecurityGroup.GroupId
+  DbClusterIdentifier:
+    Description: Aurora cluster identifier.
+    Value: !Ref DbCluster
+  DbClusterArn:
+    Description: Aurora cluster ARN.
+    Value: !Sub arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:cluster:${DbCluster}
+  DbClusterEndpoint:
+    Description: Cluster endpoint (the same host name is reader before and writer after a promotion).
+    Value: !GetAtt DbCluster.Endpoint.Address
+  DbClusterResourceId:
+    Description: Cluster resource id, used in the rds-db:connect resource ARN.
+    Value: !GetAtt DbCluster.DBClusterResourceId
+  KmsKeyArn:
+    Description: Regional customer managed key.
+    Value: !GetAtt DataKey.Arn
+  AlertTopicArn:
+    Description: Alert topic ARN.
+    Value: !Ref AlertTopic
+  GlobalClusterIdentifier:
+    Description: Global cluster identifier (generated by the primary stack, echoed by the secondary stack).
+    Value: !If [IsPrimary, !Ref GlobalCluster, !Ref GlobalClusterIdentifier]
+  MasterSecretArn:
+    Condition: IsPrimary
+    Description: Master secret of the primary cluster (primary only). Read only by the schema bootstrap.
+    Value: !Ref MasterSecret

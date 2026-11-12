@@ -1,0 +1,42 @@
+# Tooling caches and build output
+.aws-sam/
+__pycache__/
+*.pyc
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+node_modules/
+build/
+
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+samconfig.local.toml
+*.tfstate
+
+# More local artifacts
+.import_linter_cache/
+*.tfstate.backup
+*.tfplan
+*.tfvars
+packaged-*.yaml
+*.p12
+*.pfx
+*.jks
+*.log
+*.har
+
+# Local workflow environment and runtime state (prod.env, locks, and run summaries are never versioned)
+/workflows-local/
+**/prod.env
+.github/workflows-local/.locks/
+.github/workflows-local/.runs/
+
+# Drill runner output (local only)
+/reports/

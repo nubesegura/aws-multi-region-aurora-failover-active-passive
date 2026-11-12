@@ -1,0 +1,29 @@
+# Config environments used by the tooling:
+#   prod-api      sam build / sam deploy of templates/api.yaml (scripts/deploy.sh) and sam validate (CI)
+#   prod-database sam validate only (CI); the database stack is deployed with aws cloudformation deploy
+# bootstrap, edge and dns are plain CloudFormation and have no section here.
+# Stack name, region, artifact bucket, role, parameter overrides and the five mandatory tags are passed on the command
+# line by scripts/deploy.sh (tags come from scripts/lib/common.sh, the single source for stack tags).
+version = 0.1
+
+[prod-database.validate.parameters]
+template_file = "templates/database.yaml"
+lint = true
+
+[prod-api.validate.parameters]
+template_file = "templates/api.yaml"
+lint = true
+
+[prod-api.build.parameters]
+template_file = "templates/api.yaml"
+build_dir = ".aws-sam/build/api"
+use_container = false
+
+[prod-api.deploy.parameters]
+template_file = ".aws-sam/build/api/template.yaml"
+s3_prefix = "api"
+capabilities = "CAPABILITY_NAMED_IAM"
+resolve_s3 = false
+confirm_changeset = false
+fail_on_empty_changeset = false
+disable_rollback = false

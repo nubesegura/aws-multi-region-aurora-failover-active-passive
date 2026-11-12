@@ -1,0 +1,24 @@
+# Tool configuration only: the backend is shipped by `sam build` (CodeUri: src/backend), not as a wheel.
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+branch = true
+source = ["dr_demo"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+mypy_path = "$MYPY_CONFIG_FILE_DIR"
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["boto3.*", "botocore.*", "pg8000.*"]
+ignore_missing_imports = true

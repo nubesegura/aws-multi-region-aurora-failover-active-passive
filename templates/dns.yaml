@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  AWS DR demo - weighted DNS (deploy in us-east-1). Two weighted alias A records for the API domain,
+  one per data region. Manual traffic switch: change the weights and update this stack.
+
+# This stack stays in us-east-1 (global region) on purpose: the Route 53 control plane is reached through us-east-1, so a
+# weight switch keeps working during a real us-east-2 outage (ADR 0003).
+
+# Weight table for the drill (PrimaryWeight / SecondaryWeight; "primary" means the us-east-2 record, SetIdentifier use2):
+#   State                                   use2 (Primary)   usw2 (Secondary)
+#   Normal operation                        255              0
+#   After promoting us-west-2               0                255
+#   Both answer (never in a real drill)     128              128   (only for tests; writes to the read-only side fail with 503)
+#   Not allowed                             0                0     (rejected by the Rules section below)
+# Order of a drill: fence the old region, promote the database, only then change the weights.
+#
+# TTL: alias records have no TTL of their own; Route 53 answers alias queries with a 60 second TTL, so
+# resolvers can keep the previous answer for up to about 60 s after the stack update completes.
+# EvaluateTargetHealth is false on purpose: automatic failover would send writes to a database that is
+# still read-only (out of scope, see the design review). Nothing else lives in this stack.
+
+Parameters:
+  ApiDomainName:
+    Type: String
+    Description: Fully qualified API domain name that clients use (must belong to the hosted zone).
+    AllowedPattern: "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+    ConstraintDescription: Lowercase fully qualified host name without scheme or path, for example api.example.com.
+  HostedZoneId:
+    Type: String
+    Description: Id of the existing public hosted zone that contains ApiDomainName.
+    AllowedPattern: "^Z[A-Z0-9]{5,31}$"
+    ConstraintDescription: A Route 53 hosted zone id (starts with Z).
+  PrimaryTargetDomainName:
+    Type: String
+    Description: Regional API Gateway domain name of the us-east-2 custom domain (api stack output RegionalDomainName).
+    AllowedPattern: "^[a-z0-9.-]+\\.amazonaws\\.com$"
+    ConstraintDescription: An API Gateway regional domain name such as d-xxxx.execute-api.<region>.amazonaws.com.
+  PrimaryTargetHostedZoneId:
+    Type: String
+    Description: Hosted zone id of the us-east-2 regional domain name (api stack output RegionalHostedZoneId).
+    AllowedPattern: "^Z[A-Z0-9]{5,31}$"
+    ConstraintDescription: A Route 53 hosted zone id (starts with Z).
+  SecondaryTargetDomainName:
+    Type: String
+    Description: Regional API Gateway domain name of the us-west-2 custom domain (api stack output RegionalDomainName).
+    AllowedPattern: "^[a-z0-9.-]+\\.amazonaws\\.com$"
+    ConstraintDescription: An API Gateway regional domain name such as d-xxxx.execute-api.<region>.amazonaws.com.
+  SecondaryTargetHostedZoneId:
+    Type: String
+    Description: Hosted zone id of the us-west-2 regional domain name (api stack output RegionalHostedZoneId).
+    AllowedPattern: "^Z[A-Z0-9]{5,31}$"
+    ConstraintDescription: A Route 53 hosted zone id (starts with Z).
+  PrimaryWeight:
+    Type: Number
+    Description: Weight of the us-east-2 record (SetIdentifier use2), 0 to 255.
+    Default: 255
+    MinValue: 0
+    MaxValue: 255
+    ConstraintDescription: Must be a whole number between 0 and 255.
+  SecondaryWeight:
+    Type: Number
+    Description: Weight of the us-west-2 record (SetIdentifier usw2), 0 to 255.
+    Default: 0
+    MinValue: 0
+    MaxValue: 255
+    ConstraintDescription: Must be a whole number between 0 and 255.
+
+Rules:
+  AtLeastOneWeightPositive:
+    Assertions:
+      - Assert: !Or
+          - !Not [!Equals [!Ref PrimaryWeight, "0"]]
+          - !Not [!Equals [!Ref SecondaryWeight, "0"]]
+        AssertDescription: PrimaryWeight and SecondaryWeight cannot both be 0 (no record would answer).
+
+Resources:
+  # Route 53 record sets cannot carry tags and have no name property beyond the DNS name.
+  PrimaryRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ApiDomainName
+      Type: A
+      SetIdentifier: use2
+      Weight: !Ref PrimaryWeight
+      AliasTarget:
+        DNSName: !Ref PrimaryTargetDomainName
+        HostedZoneId: !Ref PrimaryTargetHostedZoneId
+        EvaluateTargetHealth: false
+
+  SecondaryRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ApiDomainName
+      Type: A
+      SetIdentifier: usw2
+      Weight: !Ref SecondaryWeight
+      AliasTarget:
+        DNSName: !Ref SecondaryTargetDomainName
+        HostedZoneId: !Ref SecondaryTargetHostedZoneId
+        EvaluateTargetHealth: false
+
+Outputs:
+  ApiFqdn:
+    Description: Fully qualified API domain name served by the weighted records.
+    Value: !Ref ApiDomainName

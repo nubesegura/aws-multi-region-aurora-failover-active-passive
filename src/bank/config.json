@@ -1,0 +1,19 @@
+{
+  "apiBaseUrl": "https://api.example.invalid",
+  "cognito": {
+    "primary": {
+      "region": "us-east-2",
+      "userPoolId": "us-east-2_example.invalid",
+      "clientId": "cgnc-bank-primary.invalid",
+      "endpoint": "https://cognito-idp.us-east-2.amazonaws.com",
+      "apiBaseUrl": "https://api.example.invalid"
+    },
+    "standby": {
+      "region": "us-west-2",
+      "userPoolId": "us-west-2_example.invalid",
+      "clientId": "cgnc-bank-standby.invalid",
+      "endpoint": "https://cognito-idp.us-west-2.amazonaws.com",
+      "apiBaseUrl": "https://api.example.invalid"
+    }
+  }
+}
