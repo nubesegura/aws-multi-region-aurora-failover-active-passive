@@ -8,7 +8,10 @@ CloudFront address. This is a non-production, educational project meant to be cr
 Status: baseline spec 001 deployed on 2026-10-14; spec `002-multi-region-cognito` (Cognito Multi-Region Replication replacing the
 API key, with the 2026-11-10 region realignment) deployed and working in `prod` on 2026-11-10, in a single AWS account.
 Diagrams: AWS components [architecture.drawio](architecture.drawio) / [png](architecture.png) and layers
-[architecture-layers.drawio](architecture-layers.drawio) / [png](architecture-layers.png). Animated walkthrough of the drill (normal flow, simulated outage, failover), open in a
+[architecture-layers.drawio](architecture-layers.drawio) / [png](architecture-layers.png). What changes in which resource during
+the three demo workflows: [dr-outage-flow.drawio](dr-outage-flow.drawio) / [png](dr-outage-flow.png) (`demo-1-outage`),
+[dr-failover-flow.drawio](dr-failover-flow.drawio) / [png](dr-failover-flow.png) (`demo-2-failover`, to-secondary) and
+[dr-failback-flow.drawio](dr-failback-flow.drawio) / [png](dr-failback-flow.png) (`demo-3-failback`, to-primary). Animated walkthrough of the drill (normal flow, simulated outage, failover), open in a
 browser: [dr-flow-animation.html](dr-flow-animation.html). Spanish copy of the runbook:
 [../docs-es/dr-runbook.md](../docs-es/dr-runbook.md) (English is the source).
 Related: [functional.md](functional.md), [technical.md](technical.md), [dr-runbook.md](dr-runbook.md),

@@ -329,7 +329,8 @@ concurrency in the template ([ADR 0012](docs/adr/0012-no-lambda-reserved-concurr
   only on an interactive terminal; it cannot be passed as a flag or run from a non-interactive job.
 - `scripts/dr/10-simulate-outage.sh` is named for the drill but is also the **fence** that protects against split brain
   after an unplanned failover (same mechanism, reserved concurrency 0).
-- `deploy`, `destroy`, `simulate-outage` and `failover` share one concurrency group; GitHub keeps one pending run per group, so check the run
+- For live demos, `demo-1-outage`, `demo-2-failover` and `demo-3-failback` run the same steps with no inputs (see the runbook).
+- `deploy`, `destroy`, `simulate-outage`, `failover` and the three `demo-*` workflows share one concurrency group; GitHub keeps one pending run per group, so check the run
   list after dispatching (a pending run can silently replace another).
 - The global bootstrap stack `stk-useast1-drdemo-bootstrap-prod` is created and deleted by hand; the workflows never touch it.
 - The API Gateway `OPTIONS` methods (CORS preflight), `GET /health` and the gateway's own error responses need no token; the gateway errors and preflight answer

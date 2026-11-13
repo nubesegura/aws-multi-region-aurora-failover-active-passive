@@ -1,0 +1,155 @@
+# Demo step 1 of 3: simulate the outage of the PRIMARY region. Manual only, NO inputs: the region is fixed to
+# AWS_REGION_PRIMARY of the prod environment, so a presenter only clicks "Run workflow".
+# Diagram: docs/dr-outage-flow.png. Next step: demo-2-failover. Return to the resting state: demo-3-failback.
+#
+# It runs scripts/dr/10-simulate-outage.sh --region <primary>: reserved concurrency 0 on the six API functions of the
+# primary region (every request there is throttled). The database, DNS and Cognito are NOT touched. Nothing is created
+# or deleted. It is the same action as simulate-outage (action fence, region <primary>, confirm <primary>).
+#
+# Confirmation: the typed confirmation of simulate-outage (requirement 8.4) is replaced here by the "Run workflow" click
+# and the protection of the prod environment (owner decision 2026-11-13, for live demos). simulate-outage keeps it.
+#
+# UNDO: demo-3-failback lifts the fence as its first step. To lift only the fence: simulate-outage, action unfence,
+# region <primary>.
+#
+# REQUIRED CONFIGURATION in the GitHub Environment "prod" (same names as deploy.yml):
+#   Variables: AWS_REGION_PRIMARY AWS_REGION_SECONDARY AWS_REGION_GLOBAL API_DOMAIN_NAME HOSTED_ZONE_ID
+#   Secrets:   AWS_ROLE_ARN
+#
+# WARNING: the concurrency group drdemo-prod-infrastructure is shared with deploy, destroy, simulate-outage, failover and
+# the other demo workflows. GitHub keeps only one pending run per group: after dispatching, confirm that the run started.
+name: demo 1 - outage of the primary region
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: drdemo-prod-infrastructure
+  cancel-in-progress: false
+
+jobs:
+  outage:
+    name: fence the primary region (prod)
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION_PRIMARY: ${{ vars.AWS_REGION_PRIMARY }}
+      AWS_REGION_SECONDARY: ${{ vars.AWS_REGION_SECONDARY }}
+      AWS_REGION_GLOBAL: ${{ vars.AWS_REGION_GLOBAL }}
+      API_DOMAIN_NAME: ${{ vars.API_DOMAIN_NAME }}
+      HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+    steps:
+      - name: Validate the branch, the variables and the secrets
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error title=Wrong branch::this workflow runs only from refs/heads/main (got ${GITHUB_REF//[^A-Za-z0-9_\/.-]/?})"
+            exit 1
+          fi
+          missing=()
+          for name in AWS_REGION_PRIMARY AWS_REGION_SECONDARY AWS_REGION_GLOBAL API_DOMAIN_NAME HOSTED_ZONE_ID; do
+            if [[ -z "${!name:-}" ]]; then missing+=("variable ${name}"); fi
+          done
+          if [[ -z "${AWS_ROLE_ARN:-}" ]]; then missing+=("secret AWS_ROLE_ARN"); fi
+          if ((${#missing[@]} > 0)); then
+            echo "::error title=Missing configuration in the prod environment::${missing[*]}"
+            printf '  - %s\n' "${missing[@]}"
+            exit 1
+          fi
+          date -u +%Y-%m-%dT%H:%M:%SZ >"${RUNNER_TEMP}/started-at"
+          echo "Branch and configuration are in place. Region to fence: ${AWS_REGION_PRIMARY}."
+
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare the step timer and the helper functions
+        run: |
+          set -euo pipefail
+          cat >"${RUNNER_TEMP}/dr-helpers.sh" <<'EOF'
+          STEP_TIMINGS="${RUNNER_TEMP}/step-timings.tsv"
+
+          # timed LABEL COMMAND... ; runs the command, appends "label<TAB>seconds<TAB>exit code" and returns its exit code.
+          timed() {
+            local label="$1" started rc=0
+            shift
+            started="$(date +%s)"
+            "$@" || rc=$?
+            printf '%s\t%s\t%s\n' "${label}" "$(($(date +%s) - started))" "${rc}" >>"${STEP_TIMINGS}"
+            return "${rc}"
+          }
+
+          # verify_account ; the account id is read, masked and never printed.
+          verify_account() {
+            local id
+            id="$(aws sts get-caller-identity --query Account --output text 2>/dev/null)" || id=""
+            if [[ ! "${id}" =~ ^[0-9]{12}$ ]]; then
+              echo "::error title=AWS identity::sts get-caller-identity did not return an account; the OIDC login is not usable"
+              return 1
+            fi
+            echo "::add-mask::${id}"
+            echo "AWS identity verified (account id masked)."
+          }
+          EOF
+          : >"${RUNNER_TEMP}/step-timings.tsv"
+          echo "Helpers written."
+
+      - name: AWS login
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION_GLOBAL }}
+          role-duration-seconds: 3600
+      - name: Verify the AWS account
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "${RUNNER_TEMP}/dr-helpers.sh"
+          timed "Verify the AWS account" verify_account
+
+      - name: Fence the primary region (10-simulate-outage.sh)
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "${RUNNER_TEMP}/dr-helpers.sh"
+          timed "10-simulate-outage.sh fence ${AWS_REGION_PRIMARY}" bash scripts/dr/10-simulate-outage.sh --region "${AWS_REGION_PRIMARY}"
+      - name: Show the fence status
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "${RUNNER_TEMP}/dr-helpers.sh"
+          timed "10-simulate-outage.sh status ${AWS_REGION_PRIMARY}" bash scripts/dr/10-simulate-outage.sh --status --region "${AWS_REGION_PRIMARY}"
+
+      - name: Summary
+        if: always()
+        run: |
+          set -uo pipefail
+          safe() { if [[ "${1:-}" =~ ^[a-z0-9-]{1,40}$ ]]; then printf '%s' "$1"; else printf '(not valid)'; fi; }
+          {
+            echo "## demo 1 - outage of the primary region"
+            echo
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Fenced region | $(safe "${AWS_REGION_PRIMARY}") |"
+            echo "| Actor | ${GITHUB_ACTOR} |"
+            echo "| Started (UTC) | $(cat "${RUNNER_TEMP}/started-at" 2>/dev/null || echo not-started) |"
+            echo "| Finished (UTC) | $(date -u +%Y-%m-%dT%H:%M:%SZ) |"
+            echo "| Next step | demo 2 - failover to the secondary region |"
+            echo
+            echo "| Step | Seconds | Exit code |"
+            echo "| --- | --- | --- |"
+            if [[ -f "${RUNNER_TEMP}/step-timings.tsv" ]]; then
+              while IFS=$'\t' read -r label secs rc; do
+                echo "| ${label} | ${secs} | ${rc} |"
+              done <"${RUNNER_TEMP}/step-timings.tsv"
+            fi
+          } >>"${GITHUB_STEP_SUMMARY}"

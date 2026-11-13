@@ -24,6 +24,25 @@ Versión en inglés (fuente): [docs/dr-runbook.md](../docs/dr-runbook.md). Esta 
 
 ## Hoja de referencia rápida
 
+Qué cambia en cada recurso de AWS, paso a paso (diagramas en inglés): [outage simulado de us-east-2](../docs/dr-outage-flow.png),
+[failover a us-west-2](../docs/dr-failover-flow.png) y [retorno a us-east-2](../docs/dr-failback-flow.png).
+
+### Demo en vivo: tres workflows sin entradas
+
+Para una presentación, ejecuta estos tres en orden desde *Actions*, rama `main`: solo haz clic en *Run workflow*, no hay nada que
+escribir. Las regiones salen del Environment `prod`. Corren los mismos scripts y pasos que `simulate-outage` y `failover`; la
+confirmación escrita se reemplaza por el clic y la protección del Environment `prod` (decisión del propietario, 2026-11-13). El runner
+automático del simulacro sigue usando `simulate-outage` y `failover`.
+
+| # | Workflow | Equivale a | Diagrama | Equivalente local |
+|---|---|---|---|---|
+| 1 | `demo 1 - outage of the primary region` (`demo-1-outage.yml`) | `simulate-outage` fence us-east-2 | [outage](../docs/dr-outage-flow.png) | `bash .github/workflows-local/demo-1-outage.sh` |
+| 2 | `demo 2 - failover to the secondary region` (`demo-2-failover.yml`) | `failover` to-secondary | [failover](../docs/dr-failover-flow.png) | `bash .github/workflows-local/demo-2-failover.sh` |
+| 3 | `demo 3 - failback to the primary region` (`demo-3-failback.yml`) | `failover` to-primary | [retorno](../docs/dr-failback-flow.png) | `bash .github/workflows-local/demo-3-failback.sh` |
+
+`demo 2` se detiene si antes no corrió `demo 1` (el primario debe tener fence). `demo 3` levanta el fence por sí mismo, así que
+deshace ambos. Los scripts locales hacen una pregunta s/N (`--yes` la omite, `--dry-run` no llama a AWS).
+
 ### Simulacro planificado con los workflows (ambas regiones sanas, sin pérdida de datos)
 
 Se lanza desde GitHub: *Actions > simulate-outage* y *Actions > failover*, rama `main`, Environment `prod`. Usan los mismos scripts

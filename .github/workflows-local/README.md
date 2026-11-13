@@ -17,6 +17,7 @@ Local Bash and Python orchestration suite that mirrors the GitHub Actions workfl
 - `destroy.sh` — Local equivalent of `.github/workflows/destroy.yml`. Orchestrates `scripts/destroy.sh` in safe teardown order (`dns`, `api`, `cognito` with deletion protection lifted and replica removed before primary, global cluster detach, `database`/`network`/`edge`, `bootstrap`, and leftover checks).
 - `simulate-outage.sh` — Local equivalent of `.github/workflows/simulate-outage.yml`. Runs `status`, `fence`, or `unfence` against a data region (`AWS_REGION_PRIMARY` or `AWS_REGION_SECONDARY`).
 - `failover.sh` — Local equivalent of `.github/workflows/failover.yml`. Runs planned switchover `to-secondary` (activating the Cognito replica in `us-west-2`, promoting Aurora, switching Route 53 weights, validating and checking ledger consistency) and failback `to-primary` (unfence primary, promoting Aurora back, deactivating the Cognito replica in `us-west-2`, switching Route 53 weights, validating and checking consistency).
+- `demo-1-outage.sh`, `demo-2-failover.sh`, `demo-3-failback.sh` — Parameter-free wrappers for live demos (local equivalents of the `demo-*.yml` workflows).
 - `provision-users/` — Standalone folder (not part of the deploy/destroy flow) with `provision_users.py`, its tests, `.env.example` (versioned template) and `.env` (git-ignored). Idempotent local CLI tool that provisions confirmed demo users (`bank-operator` and `dashboard-viewer`, plus the optional `e2e-runner` for the automated DR drill when `DEMO_E2E_EMAIL` is set; `--only e2e-runner` touches just that user) in the primary `us-east-2` User Pool and polls `us-west-2` until Multi-Region Replication completes.
 - `.locks/` — Ephemeral lock directories preventing concurrent runs (git-ignored).
 - `.runs/` — Timestamped Markdown run summaries and step timings (git-ignored).
@@ -79,6 +80,17 @@ bash .github/workflows-local/failover.sh --direction to-secondary --confirm fail
 
 # Failback to primary region (us-east-2):
 bash .github/workflows-local/failover.sh --direction to-primary --confirm failover
+```
+
+### 4b. Live demo: three steps with no parameters
+
+Local equivalents of `demo-1-outage.yml`, `demo-2-failover.yml` and `demo-3-failback.yml`. Regions come from `prod.env`; each script
+asks one y/N question (`--yes` skips it) and then calls `simulate-outage.sh` or `failover.sh` with fixed arguments.
+
+```bash
+bash .github/workflows-local/demo-1-outage.sh     # fence the primary region
+bash .github/workflows-local/demo-2-failover.sh   # planned failover to the secondary region
+bash .github/workflows-local/demo-3-failback.sh   # unfence and fail back to the primary region
 ```
 
 ### 5. Teardown the Environment

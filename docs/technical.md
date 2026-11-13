@@ -367,8 +367,9 @@ value would be reverted by the next stack update. The consequences and the mitig
 | `scripts/dr/*.sh` | The drill ([dr-runbook.md](dr-runbook.md)) |
 
 Workflows (all in `.github/workflows/`, actions pinned by commit SHA): `ci.yml` (every push and pull request, no AWS access);
-`deploy.yml` and `destroy.yml` (manual, three groups each); `simulate-outage.yml` and `failover.yml` (manual, from `main` only). The
-four manual ones share the concurrency group `drdemo-prod-infrastructure`.
+`deploy.yml` and `destroy.yml` (manual, three groups each); `simulate-outage.yml` and `failover.yml` (manual, from `main` only); `demo-1-outage.yml`,
+`demo-2-failover.yml` and `demo-3-failback.yml` (manual, from `main` only, no inputs: the same steps with the region and direction
+fixed, for live demos). All the manual ones share the concurrency group `drdemo-prod-infrastructure`.
 
 Behaviour worth knowing:
 
